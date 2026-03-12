@@ -50,7 +50,7 @@
   <script>
     let gameStarted = false;
 
-    // --- MODULE 1: HAND INTERACTIONS (Pinch to Grab & Punch to Break) ---
+    // --- MODULE 1: HAND INTERACTIONS (Pinch to Grab, Hold, Throw & Punch to Break) ---
     AFRAME.registerComponent('hand-interactions', {
         init: function () {
             this.grabbedEl = null;
@@ -71,6 +71,7 @@
         onPinchStart: function () {
             if (this.hoverEl && !this.grabbedEl) {
                 this.grabbedEl = this.hoverEl;
+                // Make kinematic so it perfectly follows the hand without physics lag
                 this.grabbedEl.setAttribute('dynamic-body', 'type: kinematic');
                 if (this.grabbedEl.dataset.originalColor) {
                     this.grabbedEl.setAttribute('color', this.grabbedEl.dataset.originalColor);
@@ -80,9 +81,11 @@
 
         onPinchEnd: function () {
             if (this.grabbedEl) {
+                // Restore dynamic physics to allow it to be thrown
                 this.grabbedEl.setAttribute('dynamic-body', 'type: dynamic');
                 const body = this.grabbedEl.components['dynamic-body']?.body;
                 if (body) {
+                    // Apply hand velocity to throw it
                     body.velocity.set(this.velocity.x * 2.5, this.velocity.y * 2.5, this.velocity.z * 2.5);
                 }
                 this.grabbedEl = null;
@@ -92,7 +95,7 @@
         tick: function (time, timeDelta) {
             this.el.object3D.getWorldPosition(this.handPos);
 
-            // Velocity tracking for throwing
+            // Velocity tracking for throwing calculations
             if (timeDelta > 0) {
                 this.positions.push({ pos: this.handPos.clone(), time: time });
                 if (this.positions.length > 5) this.positions.shift();
@@ -116,7 +119,7 @@
                 this.isFist = (maxDist > 0 && maxDist < 0.085);
             }
 
-            // Hold Object
+            // Hold Object & Keep it attached to hand
             if (this.grabbedEl) {
                 const offset = new THREE.Vector3(0, -0.05, -0.05).applyQuaternion(this.el.object3D.quaternion);
                 const targetPos = this.handPos.clone().add(offset);
@@ -130,7 +133,7 @@
                 return;
             }
 
-            // Hover Logic
+            // Hover Logic (Highlights objects you can grab)
             let closest = null;
             let minDist = Infinity;
             document.querySelectorAll('.grabbable').forEach(el => {
@@ -165,41 +168,36 @@
         }
     });
 
-    // --- MODULE 2: HAND-EXTENSION LOCOMOTION ---
+    // --- MODULE 2: HAND-EXTENSION LOCOMOTION (COMPLETELY REWRITTEN FOR QUEST 3) ---
     AFRAME.registerComponent('hand-locomotion', {
         init: function () {
             this.camera = document.querySelector('a-camera');
             this.rig = document.getElementById('rig');
             this.handPos = new THREE.Vector3();
-            this.camPos = new THREE.Vector3();
             this.moveDir = new THREE.Vector3();
         },
         tick: function (time, timeDelta) {
             if (!timeDelta || !gameStarted) return;
 
-            // Get World positions of Hand and Head (Camera)
             this.el.object3D.getWorldPosition(this.handPos);
-            this.camera.object3D.getWorldPosition(this.camPos);
 
-            // Calculate horizontal distance between head and hand
-            const dx = this.handPos.x - this.camPos.x;
-            const dz = this.handPos.z - this.camPos.z;
-            const distance = Math.sqrt(dx*dx + dz*dz);
+            // Convert Hand Position into Local Camera Space
+            // This accurately detects if the hand is in *front* of your face, regardless of where you look
+            const localHandPos = this.handPos.clone();
+            this.camera.object3D.worldToLocal(localHandPos);
 
-            // Showing palms to Meta Quest and pushing hands away from body
-            const pushThreshold = 0.30; 
-            // In Meta Quest WebXR, showing palms to the headset while extending arms 
-            // highly correlates with the hand being elevated and pushed forward.
-            const isPalmsShownAndPushedOut = (distance > pushThreshold) && (this.handPos.y > this.camPos.y - 0.5);
-
-            if (isPalmsShownAndPushedOut) {
-                // Get direction camera is looking
+            // localHandPos.z is negative when the hand is in front of the headset.
+            // localHandPos.y is negative when the hand is below the headset.
+            // Criteria: Hand is pushed out (>35cm in front) AND raised up (higher than chest level)
+            if (localHandPos.z < -0.35 && localHandPos.y > -0.5) {
+                
+                // Get the direction the camera is looking
                 this.camera.object3D.getWorldDirection(this.moveDir);
-                this.moveDir.y = 0; // Keep movement locked to floor
+                this.moveDir.y = 0; // Lock movement to the floor
                 this.moveDir.normalize();
 
-                // Move forward by the exact requested speed of 0.19 
-                // Scaled by timeDelta to maintain smooth movement regardless of framerate
+                // Explicit speed of 0.19 requested by user.
+                // Multiplying by (timeDelta / 16.66) ensures smooth movement regardless of headset framerate
                 const speed = 0.19; 
                 this.rig.object3D.position.addScaledVector(this.moveDir, speed * (timeDelta / 16.66));
             }
@@ -315,8 +313,8 @@
     <p>Deadline Missed. Time to break everything.</p>
     
     <ul class="instructions">
-      <li><strong>Walk:</strong> Show your palms to the headset and push your LEFT hand away from your body.</li>
-      <li><strong>Grab & Throw:</strong> Pinch your thumb and index finger together on objects (both hands).</li>
+      <li><strong>Walk:</strong> Raise your hands up (showing palms) and push them away from your body.</li>
+      <li><strong>Grab & Throw:</strong> Pinch your thumb and index finger together on objects to hold, then release to throw (both hands).</li>
       <li><strong>Punch:</strong> Make a fist and hit objects to damage them.</li>
     </ul>
 
@@ -340,9 +338,10 @@
                 hand-locomotion>
       </a-entity>
 
-      <!-- Right Hand: Interaction Only -->
+      <!-- Right Hand: Interaction + Extension Locomotion (Added locomotion to right as well just in case) -->
       <a-entity hand-tracking-controls="hand: right" 
-                hand-interactions>
+                hand-interactions
+                hand-locomotion>
       </a-entity>
     </a-entity>
 
@@ -431,8 +430,7 @@
       </script>
     </a-entity>
 
-    <!-- Boss (Now uses physical velocity for movement & adjusted Y pos to not float) -->
-    <!-- Position changed from 0 1 -4 to 0 0.4 -4 to place feet directly on the ground -->
+    <!-- Boss -->
     <a-entity id="boss" class="breakable" position="0 0.4 -4" boss-behavior dynamic-body="mass: 80" smashable="health: 12; smashedColor: #ff0000">
       <a-box position="0 0.6 0" width="0.6" height="1.0" depth="0.4" color="#00008B"></a-box>
       <a-box position="0 1.3 0" width="0.35" height="0.35" depth="0.35" color="#ffe0bd"></a-box>
