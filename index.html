@@ -60,7 +60,7 @@
             this.velocity = new THREE.Vector3();
             this.handPos = new THREE.Vector3();
             this.worldPos = new THREE.Vector3();
-            this.lastHits = new Map(); // Track punch cooldowns
+            this.hitCooldowns = new Map(); // Tracks last hit time to prevent rapid-fire
 
             this.onPinchStart = this.onPinchStart.bind(this);
             this.onPinchEnd = this.onPinchEnd.bind(this);
@@ -145,21 +145,19 @@
                 this.hoverEl.setAttribute('color', '#aaffaa'); 
             }
 
-            // Punching logic: requires making a fist + movement speed + collision cooldown
             if (this.isFist) {
-                const punchSpeed = this.velocity.length();
-                if (punchSpeed > 0.8) { // Require an actual swing
-                    document.querySelectorAll('.breakable, .grabbable').forEach(el => {
-                        el.object3D.getWorldPosition(this.worldPos);
-                        if (this.handPos.distanceTo(this.worldPos) < 0.3) {
-                            const lastHitTime = this.lastHits.get(el) || 0;
-                            if (time - lastHitTime > 500) { // 500ms cooldown so 1 punch = 1 hit
-                                this.el.emit('hit', {target: el});
-                                this.lastHits.set(el, time);
-                            }
+                document.querySelectorAll('.breakable, .grabbable').forEach(el => {
+                    el.object3D.getWorldPosition(this.worldPos);
+                    if (this.handPos.distanceTo(this.worldPos) < 0.25) {
+                        const now = performance.now();
+                        const lastHit = this.hitCooldowns.get(el) || 0;
+                        // 500ms cooldown requires distinct punches or holding the fist to register hits
+                        if (now - lastHit > 500) { 
+                            this.el.emit('hit', {target: el});
+                            this.hitCooldowns.set(el, now);
                         }
-                    });
-                }
+                    }
+                });
             }
         }
     });
@@ -172,7 +170,7 @@
             this.handPos = new THREE.Vector3();
             this.camPos = new THREE.Vector3();
             this.moveDir = new THREE.Vector3();
-            this.currentSpeed = 0; // Tracks smooth speed
+            this.currentSpeed = 0; // Tracks smooth transitioning speed
         },
         tick: function (time, timeDelta) {
             if (!timeDelta || !gameStarted) return;
@@ -183,47 +181,50 @@
             this.el.object3D.getWorldPosition(this.handPos);
             this.camera.object3D.getWorldPosition(this.camPos);
 
-            let targetSpeed = 0;
-
-            // Only calculate movement if hand is lifted
-            if (this.handPos.y >= this.camPos.y - 0.6) {
+            if (this.handPos.y < this.camPos.y - 0.6) {
+                // If hand is down, smoothly come to a stop
+                this.currentSpeed += (0 - this.currentSpeed) * 0.05;
+            } else {
                 this.camera.object3D.getWorldDirection(this.moveDir);
                 this.moveDir.y = 0; 
-                
                 if (this.moveDir.lengthSq() > 0.001) {
                     this.moveDir.normalize();
-                }
 
-                const dx = this.handPos.x - this.camPos.x;
-                const dz = this.handPos.z - this.camPos.z;
-                const forwardPush = dx * this.moveDir.x + dz * this.moveDir.z;
+                    const dx = this.handPos.x - this.camPos.x;
+                    const dz = this.handPos.z - this.camPos.z;
+                    const forwardPush = dx * this.moveDir.x + dz * this.moveDir.z;
 
-                // Set exact speed based on hand extension
-                if (forwardPush > 0.3) {
-                    targetSpeed = 0.179; // Walk forward
-                } else if (forwardPush < -0.1) {
-                    targetSpeed = -0.179; // Walk backward
+                    let targetSpeed = 0;
+                    if (forwardPush > 0.4) {
+                        targetSpeed = (forwardPush - 0.4) * 0.8; 
+                    } else if (forwardPush > -0.2 && forwardPush < 0.2) {
+                        targetSpeed = (forwardPush - 0.2) * 0.8; 
+                    }
+
+                    // Lock the maximum speed to exactly 0.179 as requested
+                    targetSpeed = Math.max(-0.179, Math.min(0.179, targetSpeed));
+
+                    // SMOOTH LIKE BUTTER: Lerp the current speed towards the target speed
+                    this.currentSpeed += (targetSpeed - this.currentSpeed) * 0.05;
                 }
             }
 
-            // Lerp the speed to make it smooth like butter (frame-rate independent)
-            const lerpFactor = (timeDelta / 1000) * 5.0; 
-            this.currentSpeed = THREE.MathUtils.lerp(this.currentSpeed, targetSpeed, lerpFactor);
-
+            // Apply movement if we are moving
             if (Math.abs(this.currentSpeed) > 0.001) {
                 this.rig.object3D.position.addScaledVector(this.moveDir, this.currentSpeed * (timeDelta / 1000));
             }
         }
     });
 
-    // --- MODULE 3: BREAKABLE LOGIC (EXACTLY 3 HITS) ---
+    // --- MODULE 3: BREAKABLE LOGIC (FORCED TO 3 HITS) ---
     AFRAME.registerComponent('smashable', {
       schema: {
-        health: {type: 'number', default: 3}, // HTML values are ignored, forced to 3 globally
+        health: {type: 'number', default: 3},
         smashedColor: {type: 'color', default: '#555'}
       },
       init: function () {
-        this.hitCount = 0; // Internal hit tracking
+        // Enforce exactly 3 hits for all shatterable items regardless of HTML presets
+        this.data.health = 3; 
 
         window.addEventListener('hit', (e) => {
            if (e.detail.target === this.el) this.takeDamage();
@@ -232,16 +233,13 @@
         this.el.addEventListener('collidestart', (e) => {
           const target = e.detail.targetEl;
           if (target && (target.classList.contains('weapon') || target.classList.contains('grabbable'))) {
-             if (!this.lastColTime || performance.now() - this.lastColTime > 500) {
-                 this.takeDamage();
-                 this.lastColTime = performance.now();
-             }
+             this.takeDamage();
           }
         });
       },
       takeDamage: function() {
-        if (this.hitCount >= 3) return; // Ignore if already shattered
-        this.hitCount++;
+        if (this.data.health <= 0) return;
+        this.data.health--;
         
         if (this.el.components['dynamic-body']) {
             this.el.setAttribute('dynamic-body', 'type: dynamic');
@@ -254,8 +252,7 @@
           z: currentScale.z * 0.9
         });
 
-        // Exactly on the 3rd hit, completely shatter the item
-        if (this.hitCount >= 3) {
+        if (this.data.health <= 0) {
           this.el.setAttribute('color', this.data.smashedColor);
           if (this.el.body) {
             this.el.setAttribute('dynamic-body', 'type: dynamic; mass: 5');
@@ -271,9 +268,9 @@
         this.isMoving = false;
         this.isKnockedOut = false;
 
-        // Listen for hits to knock him out and let him fall
         window.addEventListener('hit', (e) => {
             if (e.detail.target === this.el) {
+                // Boss gets knocked out and falls when hit
                 this.isKnockedOut = true;
                 this.el.setAttribute('dynamic-body', 'type: dynamic; mass: 80');
             }
@@ -308,10 +305,8 @@
         const dirX = (dx / distance) * speed;
         const dirZ = (dz / distance) * speed;
         
-        // Move via physics velocity
         this.el.body.velocity.set(dirX, this.el.body.velocity.y, dirZ);
         
-        // Rotate visually and sync to physics body
         const angle = Math.atan2(dirX, dirZ);
         this.el.object3D.rotation.set(0, angle, 0);
         this.el.body.quaternion.copy(this.el.object3D.quaternion);
