@@ -1,535 +1,504 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Corporate Catharsis – FIXED Locomotion & Grab</title>
-    
-    <!-- A‑Frame core and physics -->
-    <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/gh/c-frame/aframe-physics-system@v4.2.2/dist/aframe-physics-system.min.js"></script>
-
-    <style>
-        /* overlay exactly from first code */
-        #overlay {
-            position: fixed;
-            top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.85);
-            z-index: 9999;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            color: white;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            text-align: center;
-        }
-        #overlay h1 { font-size: 3.5rem; margin-bottom: 0.5rem; color: #ff4444; text-transform: uppercase; letter-spacing: 5px; }
-        #overlay p { font-size: 1.2rem; max-width: 600px; margin-bottom: 1rem; color: #ccc; }
-        .instructions {
-            background: rgba(255,255,255,0.1);
-            padding: 20px;
-            border-radius: 10px;
-            margin-bottom: 2rem;
-            text-align: left;
-            border: 1px solid #555;
-        }
-        .instructions li { margin-bottom: 10px; font-size: 1.1rem; }
-        .instructions strong { color: #7BC8A4; }
-        #start-btn {
-            padding: 15px 40px;
-            font-size: 1.5rem;
-            background: #ff4444;
-            color: white;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-            font-weight: bold;
-            transition: transform 0.2s, background 0.2s;
-        }
-        #start-btn:hover { background: #cc0000; transform: scale(1.1); }
-    </style>
+  <meta charset="utf-8">
+  <title>Corporate Catharsis - Office Rage Room</title>
   
-    <!-- ORIGINAL A-FRAME COMPONENTS from first code (hand-interactions, smashable, boss-behavior) -->
-    <script>
-        let gameStarted = false;
+  <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/gh/c-frame/aframe-physics-system@v4.2.2/dist/aframe-physics-system.min.js"></script>
 
-        AFRAME.registerComponent('hand-interactions', {
-            init: function () {
+  <style>
+    #overlay {
+      position: fixed;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0,0,0,0.85);
+      z-index: 9999;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      color: white;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      text-align: center;
+    }
+    #overlay h1 { font-size: 3.5rem; margin-bottom: 0.5rem; color: #ff4444; text-transform: uppercase; letter-spacing: 5px; }
+    #overlay p { font-size: 1.2rem; max-width: 600px; margin-bottom: 1rem; color: #ccc; }
+    .instructions {
+      background: rgba(255,255,255,0.1);
+      padding: 20px;
+      border-radius: 10px;
+      margin-bottom: 2rem;
+      text-align: left;
+      border: 1px solid #555;
+    }
+    .instructions li { margin-bottom: 10px; font-size: 1.1rem; }
+    .instructions strong { color: #7BC8A4; }
+    #start-btn {
+      padding: 15px 40px;
+      font-size: 1.5rem;
+      background: #ff4444;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      font-weight: bold;
+      transition: transform 0.2s, background 0.2s;
+    }
+    #start-btn:hover { background: #cc0000; transform: scale(1.1); }
+  </style>
+
+  <script>
+    let gameStarted = false;
+
+    // --- MODULE 1: HAND INTERACTIONS ---
+    AFRAME.registerComponent('hand-interactions', {
+        init: function () {
+            this.grabbedEl = null;
+            this.hoverEl = null;
+            this.isFist = false;
+            this.positions = [];
+            this.velocity = new THREE.Vector3();
+            this.handPos = new THREE.Vector3();
+            this.worldPos = new THREE.Vector3();
+            this.lastHits = new Map(); // Track punch cooldowns
+
+            this.onPinchStart = this.onPinchStart.bind(this);
+            this.onPinchEnd = this.onPinchEnd.bind(this);
+            this.el.addEventListener('pinchstarted', this.onPinchStart);
+            this.el.addEventListener('pinchended', this.onPinchEnd);
+        },
+
+        onPinchStart: function () {
+            if (this.hoverEl && !this.grabbedEl) {
+                this.grabbedEl = this.hoverEl;
+                this.grabbedEl.setAttribute('dynamic-body', 'type: kinematic');
+                if (this.grabbedEl.dataset.originalColor) {
+                    this.grabbedEl.setAttribute('color', this.grabbedEl.dataset.originalColor);
+                }
+            }
+        },
+
+        onPinchEnd: function () {
+            if (this.grabbedEl) {
+                this.grabbedEl.setAttribute('dynamic-body', 'type: dynamic');
+                const body = this.grabbedEl.components['dynamic-body']?.body;
+                if (body) {
+                    body.velocity.set(this.velocity.x * 2.5, this.velocity.y * 2.5, this.velocity.z * 2.5);
+                }
                 this.grabbedEl = null;
+            }
+        },
+
+        tick: function (time, timeDelta) {
+            this.el.object3D.getWorldPosition(this.handPos);
+
+            if (timeDelta > 0) {
+                this.positions.push({ pos: this.handPos.clone(), time: time });
+                if (this.positions.length > 5) this.positions.shift();
+                if (this.positions.length > 1) {
+                    const oldest = this.positions[0];
+                    const latest = this.positions[this.positions.length - 1];
+                    const dt = (latest.time - oldest.time) / 1000;
+                    if (dt > 0) this.velocity.subVectors(latest.pos, oldest.pos).multiplyScalar(1 / dt);
+                }
+            }
+
+            const mesh = this.el.getObject3D('mesh');
+            if (mesh && mesh.skeleton) {
+                const wrist = new THREE.Vector3().setFromMatrixPosition(mesh.skeleton.bones[0].matrixWorld);
+                let maxDist = 0;
+                for(let i = 1; i < mesh.skeleton.bones.length; i++) {
+                    const bone = new THREE.Vector3().setFromMatrixPosition(mesh.skeleton.bones[i].matrixWorld);
+                    maxDist = Math.max(maxDist, wrist.distanceTo(bone));
+                }
+                this.isFist = (maxDist > 0 && maxDist < 0.085);
+            }
+
+            if (this.grabbedEl) {
+                const offset = new THREE.Vector3(0, -0.05, -0.05).applyQuaternion(this.el.object3D.quaternion);
+                const targetPos = this.handPos.clone().add(offset);
+                this.grabbedEl.object3D.position.copy(targetPos);
+                this.grabbedEl.object3D.quaternion.copy(this.el.object3D.quaternion);
+                const body = this.grabbedEl.components['dynamic-body']?.body;
+                if (body) {
+                    body.position.copy(targetPos);
+                    body.quaternion.copy(this.el.object3D.quaternion);
+                }
+                return;
+            }
+
+            let closest = null;
+            let minDist = Infinity;
+            document.querySelectorAll('.grabbable').forEach(el => {
+                el.object3D.getWorldPosition(this.worldPos);
+                const d = this.handPos.distanceTo(this.worldPos);
+                if (d < 0.25 && d < minDist) { closest = el; minDist = d; }
+            });
+
+            if (this.hoverEl && this.hoverEl !== closest) {
+                this.hoverEl.setAttribute('color', this.hoverEl.dataset.originalColor);
                 this.hoverEl = null;
-                this.isFist = false;
-                this.positions = [];
-                this.velocity = new THREE.Vector3();
-                this.handPos = new THREE.Vector3();
-                this.worldPos = new THREE.Vector3();
+            }
+            if (closest && !this.hoverEl) {
+                this.hoverEl = closest;
+                if (!this.hoverEl.dataset.originalColor) this.hoverEl.dataset.originalColor = this.hoverEl.getAttribute('color');
+                this.hoverEl.setAttribute('color', '#aaffaa'); 
+            }
 
-                this.onPinchStart = this.onPinchStart.bind(this);
-                this.onPinchEnd = this.onPinchEnd.bind(this);
-                this.el.addEventListener('pinchstarted', this.onPinchStart);
-                this.el.addEventListener('pinchended', this.onPinchEnd);
-            },
-
-            onPinchStart: function () {
-                if (this.hoverEl && !this.grabbedEl) {
-                    this.grabbedEl = this.hoverEl;
-                    this.grabbedEl.setAttribute('dynamic-body', 'type: kinematic');
-                    if (this.grabbedEl.dataset.originalColor) {
-                        this.grabbedEl.setAttribute('color', this.grabbedEl.dataset.originalColor);
-                    }
-                }
-            },
-
-            onPinchEnd: function () {
-                if (this.grabbedEl) {
-                    this.grabbedEl.setAttribute('dynamic-body', 'type: dynamic');
-                    const body = this.grabbedEl.components['dynamic-body']?.body;
-                    if (body) {
-                        body.velocity.set(this.velocity.x * 2.5, this.velocity.y * 2.5, this.velocity.z * 2.5);
-                    }
-                    this.grabbedEl = null;
-                }
-            },
-
-            tick: function (time, timeDelta) {
-                this.el.object3D.getWorldPosition(this.handPos);
-
-                if (timeDelta > 0) {
-                    this.positions.push({ pos: this.handPos.clone(), time: time });
-                    if (this.positions.length > 5) this.positions.shift();
-                    if (this.positions.length > 1) {
-                        const oldest = this.positions[0];
-                        const latest = this.positions[this.positions.length - 1];
-                        const dt = (latest.time - oldest.time) / 1000;
-                        if (dt > 0) this.velocity.subVectors(latest.pos, oldest.pos).multiplyScalar(1 / dt);
-                    }
-                }
-
-                const mesh = this.el.getObject3D('mesh');
-                if (mesh && mesh.skeleton) {
-                    const wrist = new THREE.Vector3().setFromMatrixPosition(mesh.skeleton.bones[0].matrixWorld);
-                    let maxDist = 0;
-                    for(let i = 1; i < mesh.skeleton.bones.length; i++) {
-                        const bone = new THREE.Vector3().setFromMatrixPosition(mesh.skeleton.bones[i].matrixWorld);
-                        maxDist = Math.max(maxDist, wrist.distanceTo(bone));
-                    }
-                    this.isFist = (maxDist > 0 && maxDist < 0.085);
-                }
-
-                if (this.grabbedEl) {
-                    const offset = new THREE.Vector3(0, -0.05, -0.05).applyQuaternion(this.el.object3D.quaternion);
-                    const targetPos = this.handPos.clone().add(offset);
-                    this.grabbedEl.object3D.position.copy(targetPos);
-                    this.grabbedEl.object3D.quaternion.copy(this.el.object3D.quaternion);
-                    const body = this.grabbedEl.components['dynamic-body']?.body;
-                    if (body) {
-                        body.position.copy(targetPos);
-                        body.quaternion.copy(this.el.object3D.quaternion);
-                    }
-                    return;
-                }
-
-                let closest = null;
-                let minDist = Infinity;
-                document.querySelectorAll('.grabbable').forEach(el => {
-                    el.object3D.getWorldPosition(this.worldPos);
-                    const d = this.handPos.distanceTo(this.worldPos);
-                    if (d < 0.25 && d < minDist) { closest = el; minDist = d; }
-                });
-
-                if (this.hoverEl && this.hoverEl !== closest) {
-                    this.hoverEl.setAttribute('color', this.hoverEl.dataset.originalColor);
-                    this.hoverEl = null;
-                }
-                if (closest && !this.hoverEl) {
-                    this.hoverEl = closest;
-                    if (!this.hoverEl.dataset.originalColor) this.hoverEl.dataset.originalColor = this.hoverEl.getAttribute('color');
-                    this.hoverEl.setAttribute('color', '#aaffaa'); 
-                }
-
-                if (this.isFist) {
+            // Punching logic: requires making a fist + movement speed + collision cooldown
+            if (this.isFist) {
+                const punchSpeed = this.velocity.length();
+                if (punchSpeed > 0.8) { // Require an actual swing
                     document.querySelectorAll('.breakable, .grabbable').forEach(el => {
                         el.object3D.getWorldPosition(this.worldPos);
-                        if (this.handPos.distanceTo(this.worldPos) < 0.25) {
-                            this.el.emit('hit', {target: el});
+                        if (this.handPos.distanceTo(this.worldPos) < 0.3) {
+                            const lastHitTime = this.lastHits.get(el) || 0;
+                            if (time - lastHitTime > 500) { // 500ms cooldown so 1 punch = 1 hit
+                                this.el.emit('hit', {target: el});
+                                this.lastHits.set(el, time);
+                            }
                         }
                     });
                 }
             }
-        });
+        }
+    });
 
-        AFRAME.registerComponent('hand-locomotion', {
-            init: function () {
-                this.camera = document.querySelector('a-camera');
-                this.rig = document.getElementById('rig');
-                this.handPos = new THREE.Vector3();
-                this.camPos = new THREE.Vector3();
-                this.moveDir = new THREE.Vector3();
-            },
-            tick: function (time, timeDelta) {
-                if (!timeDelta || !gameStarted) return;
-                const mesh = this.el.getObject3D('mesh');
-                if (!mesh || !mesh.visible) return;
-                this.el.object3D.getWorldPosition(this.handPos);
-                this.camera.object3D.getWorldPosition(this.camPos);
-                if (this.handPos.y < this.camPos.y - 0.6) return;
+    // --- MODULE 2: HAND-EXTENSION LOCOMOTION (SMOOTH LIKE BUTTER) ---
+    AFRAME.registerComponent('hand-locomotion', {
+        init: function () {
+            this.camera = document.querySelector('a-camera');
+            this.rig = document.getElementById('rig');
+            this.handPos = new THREE.Vector3();
+            this.camPos = new THREE.Vector3();
+            this.moveDir = new THREE.Vector3();
+            this.currentSpeed = 0; // Tracks smooth speed
+        },
+        tick: function (time, timeDelta) {
+            if (!timeDelta || !gameStarted) return;
+
+            const mesh = this.el.getObject3D('mesh');
+            if (!mesh || !mesh.visible) return;
+
+            this.el.object3D.getWorldPosition(this.handPos);
+            this.camera.object3D.getWorldPosition(this.camPos);
+
+            let targetSpeed = 0;
+
+            // Only calculate movement if hand is lifted
+            if (this.handPos.y >= this.camPos.y - 0.6) {
                 this.camera.object3D.getWorldDirection(this.moveDir);
                 this.moveDir.y = 0; 
-                if (this.moveDir.lengthSq() < 0.001) return;
-                this.moveDir.normalize();
+                
+                if (this.moveDir.lengthSq() > 0.001) {
+                    this.moveDir.normalize();
+                }
+
                 const dx = this.handPos.x - this.camPos.x;
                 const dz = this.handPos.z - this.camPos.z;
                 const forwardPush = dx * this.moveDir.x + dz * this.moveDir.z;
-                let speed = 0;
-                if (forwardPush > 0.4) {
-                    speed = (forwardPush - 0.4) * 0.8; 
-                } else if (forwardPush > -0.2 && forwardPush < 0.2) {
-                    speed = (forwardPush - 0.2) * 0.8; 
-                }
-                speed = Math.max(-0.4, Math.min(0.4, speed));
-                if (Math.abs(speed) > 0.01) {
-                    this.rig.object3D.position.addScaledVector(this.moveDir, speed * (timeDelta / 1000));
+
+                // Set exact speed based on hand extension
+                if (forwardPush > 0.3) {
+                    targetSpeed = 0.179; // Walk forward
+                } else if (forwardPush < -0.1) {
+                    targetSpeed = -0.179; // Walk backward
                 }
             }
-        });
 
-        AFRAME.registerComponent('smashable', {
-          schema: {
-            health: {type: 'number', default: 3},
-            smashedColor: {type: 'color', default: '#555'}
-          },
-          init: function () {
-            window.addEventListener('hit', (e) => {
-               if (e.detail.target === this.el) this.takeDamage();
-            });
-            this.el.addEventListener('collidestart', (e) => {
-              const target = e.detail.targetEl;
-              if (target && (target.classList.contains('weapon') || target.classList.contains('grabbable'))) {
-                 this.takeDamage();
-              }
-            });
-          },
-          takeDamage: function() {
-            if (this.data.health <= 0) return;
-            this.data.health--;
-            if (this.el.components['dynamic-body']) {
-                this.el.setAttribute('dynamic-body', 'type: dynamic');
-            }
-            const currentScale = this.el.getAttribute('scale') || {x: 1, y: 1, z: 1};
-            this.el.setAttribute('scale', {
-              x: currentScale.x * 0.9,
-              y: currentScale.y * 0.9,
-              z: currentScale.z * 0.9
-            });
-            if (this.data.health <= 0) {
-              this.el.setAttribute('color', this.data.smashedColor);
-              if (this.el.body) {
-                this.el.setAttribute('dynamic-body', 'type: dynamic; mass: 5');
-              }
-            }
-          }
-        });
+            // Lerp the speed to make it smooth like butter (frame-rate independent)
+            const lerpFactor = (timeDelta / 1000) * 5.0; 
+            this.currentSpeed = THREE.MathUtils.lerp(this.currentSpeed, targetSpeed, lerpFactor);
 
-        AFRAME.registerComponent('boss-behavior', {
-          init: function () {
-            this.targetPos = new THREE.Vector3();
-            this.isMoving = false;
-            this.isKnockedOut = false;
-            window.addEventListener('hit', (e) => {
-                if (e.detail.target === this.el) {
-                    this.isKnockedOut = true;
-                    this.el.setAttribute('dynamic-body', 'type: dynamic; mass: 80');
-                }
-            });
-          },
-          setNewTarget: function () {
-            if (!gameStarted) return;
-            this.targetPos.set((Math.random() - 0.5) * 8, 0, (Math.random() - 0.5) * 8);
-            this.isMoving = true;
-          },
-          tick: function (time, timeDelta) {
-            if (!gameStarted || !this.el.body || this.isKnockedOut) return;
-            if (!this.isMoving) {
-              this.setNewTarget();
-              return;
+            if (Math.abs(this.currentSpeed) > 0.001) {
+                this.rig.object3D.position.addScaledVector(this.moveDir, this.currentSpeed * (timeDelta / 1000));
             }
-            const currentPos = this.el.object3D.position;
-            const dx = this.targetPos.x - currentPos.x;
-            const dz = this.targetPos.z - currentPos.z;
-            const distance = Math.sqrt(dx*dx + dz*dz);
-            if (distance < 0.5) {
-              this.isMoving = false;
-              this.el.body.velocity.set(0, this.el.body.velocity.y, 0); 
-              setTimeout(() => { this.setNewTarget(); }, 1500 + Math.random() * 2000);
-              return;
-            }
-            const speed = 1.2;
-            const dirX = (dx / distance) * speed;
-            const dirZ = (dz / distance) * speed;
-            this.el.body.velocity.set(dirX, this.el.body.velocity.y, dirZ);
-            const angle = Math.atan2(dirX, dirZ);
-            this.el.object3D.rotation.set(0, angle, 0);
-            this.el.body.quaternion.copy(this.el.object3D.quaternion);
-          }
-        });
-
-        function startGame() {
-          gameStarted = true;
-          document.getElementById('overlay').style.display = 'none';
         }
-    </script>
+    });
+
+    // --- MODULE 3: BREAKABLE LOGIC (EXACTLY 3 HITS) ---
+    AFRAME.registerComponent('smashable', {
+      schema: {
+        health: {type: 'number', default: 3}, // HTML values are ignored, forced to 3 globally
+        smashedColor: {type: 'color', default: '#555'}
+      },
+      init: function () {
+        this.hitCount = 0; // Internal hit tracking
+
+        window.addEventListener('hit', (e) => {
+           if (e.detail.target === this.el) this.takeDamage();
+        });
+
+        this.el.addEventListener('collidestart', (e) => {
+          const target = e.detail.targetEl;
+          if (target && (target.classList.contains('weapon') || target.classList.contains('grabbable'))) {
+             if (!this.lastColTime || performance.now() - this.lastColTime > 500) {
+                 this.takeDamage();
+                 this.lastColTime = performance.now();
+             }
+          }
+        });
+      },
+      takeDamage: function() {
+        if (this.hitCount >= 3) return; // Ignore if already shattered
+        this.hitCount++;
+        
+        if (this.el.components['dynamic-body']) {
+            this.el.setAttribute('dynamic-body', 'type: dynamic');
+        }
+
+        const currentScale = this.el.getAttribute('scale') || {x: 1, y: 1, z: 1};
+        this.el.setAttribute('scale', {
+          x: currentScale.x * 0.9,
+          y: currentScale.y * 0.9,
+          z: currentScale.z * 0.9
+        });
+
+        // Exactly on the 3rd hit, completely shatter the item
+        if (this.hitCount >= 3) {
+          this.el.setAttribute('color', this.data.smashedColor);
+          if (this.el.body) {
+            this.el.setAttribute('dynamic-body', 'type: dynamic; mass: 5');
+          }
+        }
+      }
+    });
+
+    // --- MODULE 4: BOSS PHYSICS MOVEMENT (FIXED TIPPING) ---
+    AFRAME.registerComponent('boss-behavior', {
+      init: function () {
+        this.targetPos = new THREE.Vector3();
+        this.isMoving = false;
+        this.isKnockedOut = false;
+
+        // Listen for hits to knock him out and let him fall
+        window.addEventListener('hit', (e) => {
+            if (e.detail.target === this.el) {
+                this.isKnockedOut = true;
+                this.el.setAttribute('dynamic-body', 'type: dynamic; mass: 80');
+            }
+        });
+      },
+      setNewTarget: function () {
+        if (!gameStarted) return;
+        this.targetPos.set((Math.random() - 0.5) * 8, 0, (Math.random() - 0.5) * 8);
+        this.isMoving = true;
+      },
+      tick: function (time, timeDelta) {
+        if (!gameStarted || !this.el.body || this.isKnockedOut) return;
+        
+        if (!this.isMoving) {
+          this.setNewTarget();
+          return;
+        }
+        
+        const currentPos = this.el.object3D.position;
+        const dx = this.targetPos.x - currentPos.x;
+        const dz = this.targetPos.z - currentPos.z;
+        const distance = Math.sqrt(dx*dx + dz*dz);
+        
+        if (distance < 0.5) {
+          this.isMoving = false;
+          this.el.body.velocity.set(0, this.el.body.velocity.y, 0); 
+          setTimeout(() => { this.setNewTarget(); }, 1500 + Math.random() * 2000);
+          return;
+        }
+        
+        const speed = 1.2;
+        const dirX = (dx / distance) * speed;
+        const dirZ = (dz / distance) * speed;
+        
+        // Move via physics velocity
+        this.el.body.velocity.set(dirX, this.el.body.velocity.y, dirZ);
+        
+        // Rotate visually and sync to physics body
+        const angle = Math.atan2(dirX, dirZ);
+        this.el.object3D.rotation.set(0, angle, 0);
+        this.el.body.quaternion.copy(this.el.object3D.quaternion);
+      }
+    });
+
+    function startGame() {
+      gameStarted = true;
+      document.getElementById('overlay').style.display = 'none';
+    }
+  </script>
 </head>
 <body>
 
-    <!-- OVERLAY -->
-    <div id="overlay">
-        <h1>Corporate Catharsis</h1>
-        <p>Deadline Missed. Time to break everything.</p>
-        
-        <ul class="instructions">
-            <li><strong>Walk (FIXED 0.179 m/s):</strong> Show <strong>both palms</strong> towards your face to glide. Push hands forward = move forward, pull back = reverse. Speed fixed at 0.179.</li>
-            <li><strong>Grab & Throw:</strong> Pinch index and thumb together near objects (right hand).</li>
-            <li><strong>Punch:</strong> Make a fist with right hand and hit objects to smash them.</li>
-        </ul>
+  <!-- Instructions Overlay -->
+  <div id="overlay">
+    <h1>Corporate Catharsis</h1>
+    <p>Deadline Missed. Time to break everything.</p>
+    
+    <ul class="instructions">
+      <li><strong>Walk:</strong> Push your LEFT hand forward, away from your body.</li>
+      <li><strong>Grab & Throw:</strong> Pinch your index and thumb together on objects.</li>
+      <li><strong>Punch:</strong> Make a fist and hit objects to damage them.</li>
+    </ul>
 
-        <button id="start-btn" onclick="startGame()">ENTER OFFICE</button>
-    </div>
+    <button id="start-btn" onclick="startGame()">ENTER OFFICE</button>
+  </div>
 
-    <!-- A‑FRAME SCENE – environment from first code, locomotion via THREE.js (exact 0.179 speed) -->
-    <a-scene physics="gravity: -9.8; debug: false" webxr="referenceSpaceType: local-floor; optionalFeatures: hand-tracking;" style="display: block;">
-        <a-assets>
-            <img id="checker-tex" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='256' height='256'%3E%3Crect width='128' height='128' fill='%23e0e0e0'/%3E%3Crect x='128' y='128' width='128' height='128' fill='%23e0e0e0'/%3E%3Crect x='128' width='128' height='128' fill='%23333333'/%3E%3Crect y='128' width='128' height='128' fill='%23333333'/%3E%3C/svg%3E" crossorigin="anonymous">
-        </a-assets>
+  <a-scene physics="gravity: -9.8; debug: false" webxr="referenceSpaceType: local-floor; optionalFeatures: hand-tracking;">
+    
+    <a-assets>
+      <img id="checker-tex" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='256' height='256'%3E%3Crect width='128' height='128' fill='%23e0e0e0'/%3E%3Crect x='128' y='128' width='128' height='128' fill='%23e0e0e0'/%3E%3Crect x='128' width='128' height='128' fill='%23333333'/%3E%3Crect y='128' width='128' height='128' fill='%23333333'/%3E%3C/svg%3E" crossorigin="anonymous">
+    </a-assets>
 
-        <!-- RIG (camera + hands) -->
-        <a-entity id="rig" position="0 0 5">
-            <a-camera id="camera" position="0 1.6 0" look-controls wasd-controls="enabled: false"></a-camera>
-            <!-- Left & Right Hands (original components) -->
-            <a-entity hand-tracking-controls="hand: left" hand-interactions hand-locomotion></a-entity>
-            <a-entity hand-tracking-controls="hand: right" hand-interactions></a-entity>
-        </a-entity>
+    <!-- THE RIG -->
+    <a-entity id="rig" position="0 0 5">
+      <a-camera position="0 1.6 0" look-controls wasd-controls></a-camera>
 
-        <!-- Environment (unchanged) -->
-        <a-entity id="room">
-            <a-plane class="navmesh" rotation="-90 0 0" width="16" height="16" material="src: #checker-tex; repeat: 16 16; roughness: 1.0; metalness: 0.0" static-body></a-plane>
-            <a-box position="0 2 -8" width="16" height="4" depth="0.2" color="#eee" static-body></a-box>
-            <a-box position="0 2 8" width="16" height="4" depth="0.2" color="#eee" static-body></a-box>
-            <a-box position="-8 2 0" width="0.2" height="4" depth="16" color="#eee" static-body></a-box>
-            <a-box position="8 2 0" width="0.2" height="4" depth="16" color="#eee" static-body></a-box>
-            <a-box position="0 4 0" width="16" height="0.1" depth="16" color="#fff" static-body></a-box>
-        </a-entity>
+      <!-- Left Hand -->
+      <a-entity hand-tracking-controls="hand: left" 
+                hand-interactions 
+                hand-locomotion>
+      </a-entity>
 
-        <!-- Printer -->
-        <a-entity class="breakable grabbable" position="0 0.5 -7.2" dynamic-body="mass: 30" smashable="health: 6; smashedColor: #333">
-            <a-box width="1.5" height="1" depth="1" color="#f4f4f4"></a-box>
-            <a-box position="0 0.55 0" width="1.4" height="0.1" depth="0.9" color="#2b2b2b"></a-box>
-            <a-box position="0 0.56 0" width="1.2" height="0.1" depth="0.7" color="#add8e6"></a-box>
-            <a-box position="-0.5 0.6 0.4" width="0.3" height="0.05" depth="0.2" color="#111" rotation="15 0 0"></a-box>
-            <a-box position="0.8 0.1 0" width="0.4" height="0.1" depth="0.6" color="#ddd"></a-box>
-        </a-entity>
+      <!-- Right Hand -->
+      <a-entity hand-tracking-controls="hand: right" 
+                hand-interactions>
+      </a-entity>
+    </a-entity>
 
-        <!-- Filing Cabinet 1 -->
-        <a-entity class="breakable grabbable" position="-7 1 -6" dynamic-body="mass: 25" smashable="health: 4; smashedColor: #4a5568">
-            <a-box width="0.8" height="2" depth="0.8" color="#718096"></a-box>
-            <a-box position="0 0.5 0.41" width="0.7" height="0.4" depth="0.05" color="#a0aec0"></a-box>
-            <a-box position="0 0 0.41" width="0.7" height="0.4" depth="0.05" color="#a0aec0"></a-box>
-            <a-box position="0 -0.5 0.41" width="0.7" height="0.4" depth="0.05" color="#a0aec0"></a-box>
-        </a-entity>
+    <!-- Environment -->
+    <a-entity id="room">
+      <a-plane class="navmesh" rotation="-90 0 0" width="16" height="16" 
+               material="src: #checker-tex; repeat: 16 16; roughness: 1.0; metalness: 0.0" 
+               static-body></a-plane>
+      
+      <a-box position="0 2 -8" width="16" height="4" depth="0.2" color="#eee" static-body></a-box>
+      <a-box position="0 2 8" width="16" height="4" depth="0.2" color="#eee" static-body></a-box>
+      <a-box position="-8 2 0" width="0.2" height="4" depth="16" color="#eee" static-body></a-box>
+      <a-box position="8 2 0" width="0.2" height="4" depth="16" color="#eee" static-body></a-box>
+      <a-box position="0 4 0" width="16" height="0.1" depth="16" color="#fff" static-body></a-box>
+    </a-entity>
 
-        <!-- Filing Cabinet 2 -->
-        <a-entity class="breakable grabbable" position="7 1 -6" dynamic-body="mass: 25" smashable="health: 4; smashedColor: #4a5568">
-            <a-box width="0.8" height="2" depth="0.8" color="#718096"></a-box>
-            <a-box position="0 0.5 0.41" width="0.7" height="0.4" depth="0.05" color="#a0aec0"></a-box>
-            <a-box position="0 0 0.41" width="0.7" height="0.4" depth="0.05" color="#a0aec0"></a-box>
-            <a-box position="0 -0.5 0.41" width="0.7" height="0.4" depth="0.05" color="#a0aec0"></a-box>
-        </a-entity>
+    <!-- Printers and Filing Cabinets -->
+    <!-- Printer -->
+    <a-entity class="breakable grabbable" position="0 0.5 -7.2" dynamic-body="mass: 30" smashable="health: 6; smashedColor: #333">
+      <!-- Base -->
+      <a-box width="1.5" height="1" depth="1" color="#f4f4f4"></a-box>
+      <!-- Glass top Scanner -->
+      <a-box position="0 0.55 0" width="1.4" height="0.1" depth="0.9" color="#2b2b2b"></a-box>
+      <a-box position="0 0.56 0" width="1.2" height="0.1" depth="0.7" color="#add8e6"></a-box>
+      <!-- Control Panel -->
+      <a-box position="-0.5 0.6 0.4" width="0.3" height="0.05" depth="0.2" color="#111" rotation="15 0 0"></a-box>
+      <!-- Paper Tray out -->
+      <a-box position="0.8 0.1 0" width="0.4" height="0.1" depth="0.6" color="#ddd"></a-box>
+    </a-entity>
 
-        <!-- Workstations -->
-        <a-entity id="work-area">
-            <script>
-                (function(){
-                    const area = document.querySelector('#work-area');
-                    if(!area) return;
-                    const positions = [{x:-3,z:-2},{x:3,z:-2},{x:-3,z:1},{x:3,z:1},{x:-3,z:4},{x:3,z:4}];
-                    positions.forEach(pos => {
-                        const group = document.createElement('a-entity');
-                        group.setAttribute('position', `${pos.x} 0 ${pos.z}`);
-                        const desk = document.createElement('a-box');
-                        desk.setAttribute('class','breakable grabbable');
-                        desk.setAttribute('position','0 0.75 0');
-                        desk.setAttribute('width','2.0'); desk.setAttribute('height','0.05'); desk.setAttribute('depth','1.0');
-                        desk.setAttribute('color','#d2b48c');
-                        desk.setAttribute('static-body','');
-                        desk.setAttribute('smashable','health: 5; smashedColor: #8b4513');
-                        group.appendChild(desk);
-                        [-0.5,0.5].forEach(offset => {
-                            const laptop = document.createElement('a-box');
-                            laptop.setAttribute('class','breakable grabbable');
-                            laptop.setAttribute('position',`${offset} 0.8 0`);
-                            laptop.setAttribute('width','0.4'); laptop.setAttribute('height','0.05'); laptop.setAttribute('depth','0.3');
-                            laptop.setAttribute('color','#2b2b2b');
-                            laptop.setAttribute('dynamic-body','mass: 1.0');
-                            laptop.setAttribute('smashable','health: 2; smashedColor: #000');
-                            group.appendChild(laptop);
-                        });
-                        const chair = document.createElement('a-entity');
-                        chair.setAttribute('class','breakable grabbable');
-                        chair.setAttribute('position','0 0.5 0.8'); 
-                        chair.setAttribute('dynamic-body','type: kinematic; mass: 3');
-                        chair.setAttribute('smashable','health: 3; smashedColor: #111');
-                        const seat = document.createElement('a-box');
-                        seat.setAttribute('width','0.6'); seat.setAttribute('height','0.1'); seat.setAttribute('depth','0.6');
-                        seat.setAttribute('color','#333');
-                        chair.appendChild(seat);
-                        const back = document.createElement('a-box');
-                        back.setAttribute('position','0 0.5 0.25');
-                        back.setAttribute('width','0.6'); back.setAttribute('height','0.9'); back.setAttribute('depth','0.1');
-                        back.setAttribute('color','#333');
-                        chair.appendChild(back);
-                        const leg = document.createElement('a-cylinder');
-                        leg.setAttribute('position','0 -0.25 0');
-                        leg.setAttribute('radius','0.05'); leg.setAttribute('height','0.5');
-                        leg.setAttribute('color','#222');
-                        chair.appendChild(leg);
-                        group.appendChild(chair);
-                        area.appendChild(group);
-                    });
-                })();
-            </script>
-        </a-entity>
+    <!-- Filing Cabinet 1 -->
+    <a-entity class="breakable grabbable" position="-7 1 -6" dynamic-body="mass: 25" smashable="health: 4; smashedColor: #4a5568">
+      <a-box width="0.8" height="2" depth="0.8" color="#718096"></a-box>
+      <a-box position="0 0.5 0.41" width="0.7" height="0.4" depth="0.05" color="#a0aec0"></a-box>
+      <a-box position="0 0 0.41" width="0.7" height="0.4" depth="0.05" color="#a0aec0"></a-box>
+      <a-box position="0 -0.5 0.41" width="0.7" height="0.4" depth="0.05" color="#a0aec0"></a-box>
+    </a-entity>
 
-        <!-- Boss -->
-        <a-entity id="boss" class="breakable" position="0 0.4 -4" boss-behavior dynamic-body="type: kinematic; mass: 80" smashable="health: 12; smashedColor: #ff0000">
-            <a-box position="0 0.6 0" width="0.6" height="1.0" depth="0.4" color="#00008B"></a-box>
-            <a-box position="0 1.3 0" width="0.35" height="0.35" depth="0.35" color="#ffe0bd"></a-box>
-            <a-cylinder position="-0.15 0.0 0" radius="0.1" height="0.8" color="#000"></a-cylinder>
-            <a-cylinder position="0.15 0.0 0" radius="0.1" height="0.8" color="#000"></a-cylinder>
-        </a-entity>
+    <!-- Filing Cabinet 2 -->
+    <a-entity class="breakable grabbable" position="7 1 -6" dynamic-body="mass: 25" smashable="health: 4; smashedColor: #4a5568">
+      <a-box width="0.8" height="2" depth="0.8" color="#718096"></a-box>
+      <a-box position="0 0.5 0.41" width="0.7" height="0.4" depth="0.05" color="#a0aec0"></a-box>
+      <a-box position="0 0 0.41" width="0.7" height="0.4" depth="0.05" color="#a0aec0"></a-box>
+      <a-box position="0 -0.5 0.41" width="0.7" height="0.4" depth="0.05" color="#a0aec0"></a-box>
+    </a-entity>
 
-        <!-- Weapons -->
-        <a-entity id="bat" class="weapon grabbable" position="5.5 1.0 -2" dynamic-body="mass: 2">
-            <a-cylinder radius="0.03" height="0.8" color="#8B4513" rotation="0 0 10"></a-cylinder>
-        </a-entity>
-        <a-entity id="hammer" class="weapon grabbable" position="5.3 1.0 -2.5" dynamic-body="mass: 4">
-            <a-entity rotation="90 0 0">
-                <a-cylinder radius="0.02" height="0.4" color="#444"></a-cylinder>
-                <a-box position="0 0.2 0" width="0.15" height="0.1" depth="0.1" color="#222"></a-box>
-            </a-entity>
-        </a-entity>
+    <!-- Workstations generation -->
+    <a-entity id="work-area">
+      <script>
+        window.addEventListener('DOMContentLoaded', () => {
+          const area = document.querySelector('#work-area');
+          const positions = [
+            {x: -3, z: -2}, {x: 3, z: -2}, 
+            {x: -3, z: 1}, {x: 3, z: 1}, 
+            {x: -3, z: 4}, {x: 3, z: 4}
+          ];
+          
+          positions.forEach(pos => {
+            const group = document.createElement('a-entity');
+            group.setAttribute('position', `${pos.x} 0 ${pos.z}`);
+            
+            // Desk
+            const desk = document.createElement('a-box');
+            desk.setAttribute('class', 'breakable grabbable');
+            desk.setAttribute('position', '0 0.75 0');
+            desk.setAttribute('width', '2.0'); desk.setAttribute('height', '0.05'); desk.setAttribute('depth', '1.0');
+            desk.setAttribute('color', '#d2b48c');
+            desk.setAttribute('static-body', '');
+            desk.setAttribute('smashable', 'health: 5; smashedColor: #8b4513');
+            group.appendChild(desk);
 
-        <!-- Lights -->
-        <a-light type="ambient" color="#fff" intensity="0.5"></a-light>
-        <a-light type="directional" position="-1 10 1" intensity="0.6" castShadow="true"></a-light>
-    </a-scene>
+            // Laptops
+            [-0.5, 0.5].forEach(offset => {
+              const laptop = document.createElement('a-box');
+              laptop.setAttribute('class', 'breakable grabbable');
+              laptop.setAttribute('position', `${offset} 0.8 0`);
+              laptop.setAttribute('width', '0.4'); laptop.setAttribute('height', '0.05'); laptop.setAttribute('depth', '0.3');
+              laptop.setAttribute('color', '#2b2b2b');
+              laptop.setAttribute('dynamic-body', 'mass: 1.0');
+              laptop.setAttribute('smashable', 'health: 2; smashedColor: #000');
+              group.appendChild(laptop);
+            });
 
-    <!-- LOCOMOTION FIX: THREE.JS EXACT 0.179 SPEED + PINCH/PUNCH FIX -->
-    <script type="importmap">
-        {
-            "imports": {
-                "three": "https://cdn.jsdelivr.net/npm/three@0.150.1/build/three.module.js",
-                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.150.1/examples/jsm/"
-            }
-        }
-    </script>
+            // Chairs
+            const chair = document.createElement('a-entity');
+            chair.setAttribute('class', 'breakable grabbable');
+            chair.setAttribute('position', `0 0.5 0.8`); 
+            chair.setAttribute('dynamic-body', 'type: kinematic; mass: 3');
+            chair.setAttribute('smashable', 'health: 3; smashedColor: #111');
 
-    <script type="module">
-        // ========== LOCOMOTION MODULE (exact 0.179 speed, both palms) ==========
-        import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.150.1/build/three.module.js';
+            const seat = document.createElement('a-box');
+            seat.setAttribute('width', '0.6'); seat.setAttribute('height', '0.1'); seat.setAttribute('depth', '0.6');
+            seat.setAttribute('color', '#333');
+            chair.appendChild(seat);
 
-        const sceneEl = document.querySelector('a-scene');
-        sceneEl.addEventListener('loaded', () => {
-            const camera = document.getElementById('camera').components.camera.camera;
-            const rig = document.getElementById('rig').object3D;
-            const renderer = sceneEl.renderer;
+            const back = document.createElement('a-box');
+            back.setAttribute('position', '0 0.5 0.25');
+            back.setAttribute('width', '0.6'); back.setAttribute('height', '0.9'); back.setAttribute('depth', '0.1');
+            back.setAttribute('color', '#333');
+            chair.appendChild(back);
 
-            // Hand tracking data
-            let leftPalmPos = new THREE.Vector3(), rightPalmPos = new THREE.Vector3();
-            let leftPalmQuat = new THREE.Quaternion(), rightPalmQuat = new THREE.Quaternion();
-            let prevLeftPos = new THREE.Vector3(), prevRightPos = new THREE.Vector3();
-            let leftVel = new THREE.Vector3(), rightVel = new THREE.Vector3();
-            const playerVelocity = new THREE.Vector3();
-            const FRICTION = 0.92;
-            const SPEED = 0.179; // EXACT 0.179
-            const ROOM_LIMIT = 7.0;
+            const leg = document.createElement('a-cylinder');
+            leg.setAttribute('position', '0 -0.25 0');
+            leg.setAttribute('radius', '0.05'); leg.setAttribute('height', '0.5');
+            leg.setAttribute('color', '#222');
+            chair.appendChild(leg);
 
-            const clock = new THREE.Clock();
-
-            // Override animation loop
-            const originalLoop = renderer.setAnimationLoop;
-            renderer.setAnimationLoop = function(cb) {
-                const wrapped = (time, frame) => {
-                    if (cb) cb(time, frame);
-
-                    if (frame) {
-                        const dt = Math.min(clock.getDelta(), 0.05);
-                        const session = renderer.xr.getSession();
-                        if (session) {
-                            const refSpace = renderer.xr.getReferenceSpace();
-                            if (refSpace) {
-                                for (const source of session.inputSources) {
-                                    if (source.hand) {
-                                        const wristPose = frame.getJointPose(source.hand.get('wrist'), refSpace);
-                                        if (wristPose) {
-                                            const pos = new THREE.Vector3(wristPose.transform.position.x, wristPose.transform.position.y, wristPose.transform.position.z);
-                                            const quat = new THREE.Quaternion(wristPose.transform.orientation.x, wristPose.transform.orientation.y, wristPose.transform.orientation.z, wristPose.transform.orientation.w);
-                                            if (source.handedness === 'left') {
-                                                leftPalmPos.copy(pos); leftPalmQuat.copy(quat);
-                                            } else {
-                                                rightPalmPos.copy(pos); rightPalmQuat.copy(quat);
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        // velocities
-                        if (prevLeftPos.lengthSq() > 0) leftVel.copy(leftPalmPos).sub(prevLeftPos).divideScalar(dt);
-                        if (prevRightPos.lengthSq() > 0) rightVel.copy(rightPalmPos).sub(prevRightPos).divideScalar(dt);
-                        prevLeftPos.copy(leftPalmPos);
-                        prevRightPos.copy(rightPalmPos);
-
-                        // camera forward
-                        const camDir = new THREE.Vector3();
-                        camera.getWorldDirection(camDir);
-                        camDir.y = 0;
-                        camDir.normalize();
-
-                        // palm normals (palm faces -y in local, transform to world)
-                        const leftNormal = new THREE.Vector3(0, -1, 0).applyQuaternion(leftPalmQuat);
-                        const rightNormal = new THREE.Vector3(0, -1, 0).applyQuaternion(rightPalmQuat);
-
-                        // both palms showing if dot with camDir > 0.55
-                        const leftShow = leftNormal.dot(camDir) > 0.55;
-                        const rightShow = rightNormal.dot(camDir) > 0.55;
-
-                        if (leftShow && rightShow) {
-                            const avgVel = new THREE.Vector3().addVectors(leftVel, rightVel).multiplyScalar(0.5);
-                            const thrust = avgVel.dot(camDir);
-                            if (Math.abs(thrust) > 0.2) {
-                                const targetVel = camDir.clone().multiplyScalar(thrust * SPEED);
-                                playerVelocity.lerp(targetVel, 0.1);
-                            } else {
-                                playerVelocity.multiplyScalar(FRICTION);
-                            }
-                        } else {
-                            playerVelocity.multiplyScalar(FRICTION);
-                        }
-
-                        // apply to rig
-                        rig.position.addScaledVector(playerVelocity, dt * 10);
-                        rig.position.x = Math.max(-ROOM_LIMIT, Math.min(ROOM_LIMIT, rig.position.x));
-                        rig.position.z = Math.max(-ROOM_LIMIT, Math.min(ROOM_LIMIT, rig.position.z));
-                    }
-                };
-                originalLoop.call(renderer, wrapped);
-            };
-            renderer.setAnimationLoop(renderer.xr.getAnimationLoop());
+            group.appendChild(chair);
+            area.appendChild(group);
+          });
         });
+      </script>
+    </a-entity>
 
-        // Also ensure pinch/fist events work: the A-Frame components rely on 'pinchstarted'/'pinchended'
-        // which are emitted by hand-tracking-controls. They should work. If not, we add a small polyfill
-        // but likely fine.
-    </script>
+    <!-- Boss (Fixed Physics and Float) -->
+    <a-entity id="boss" class="breakable" position="0 0.4 -4" boss-behavior dynamic-body="type: kinematic; mass: 80" smashable="health: 12; smashedColor: #ff0000">
+      <a-box position="0 0.6 0" width="0.6" height="1.0" depth="0.4" color="#00008B"></a-box>
+      <a-box position="0 1.3 0" width="0.35" height="0.35" depth="0.35" color="#ffe0bd"></a-box>
+      <a-cylinder position="-0.15 0.0 0" radius="0.1" height="0.8" color="#000"></a-cylinder>
+      <a-cylinder position="0.15 0.0 0" radius="0.1" height="0.8" color="#000"></a-cylinder>
+    </a-entity>
+
+    <!-- Weapons (Grabbable) -->
+    <a-entity id="bat" class="weapon grabbable" position="5.5 1.0 -2" 
+              dynamic-body="mass: 2">
+      <a-cylinder radius="0.03" height="0.8" color="#8B4513" rotation="0 0 10"></a-cylinder>
+    </a-entity>
+
+    <a-entity id="hammer" class="weapon grabbable" position="5.3 1.0 -2.5" 
+              dynamic-body="mass: 4">
+      <a-entity rotation="90 0 0">
+        <a-cylinder radius="0.02" height="0.4" color="#444"></a-cylinder>
+        <a-box position="0 0.2 0" width="0.15" height="0.1" depth="0.1" color="#222"></a-box>
+      </a-entity>
+    </a-entity>
+
+    <!-- Lights -->
+    <a-light type="ambient" color="#fff" intensity="0.5"></a-light>
+    <a-light type="directional" position="-1 10 1" intensity="0.6" castShadow="true"></a-light>
+
+  </a-scene>
 </body>
 </html>
