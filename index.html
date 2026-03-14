@@ -50,7 +50,7 @@
   <script>
     let gameStarted = false;
 
-    // --- MODULE 1: HAND INTERACTIONS ---
+    // --- MODULE 1: HAND INTERACTIONS (Grab & Punch) ---
     AFRAME.registerComponent('hand-interactions', {
         init: function () {
             this.grabbedEl = null;
@@ -63,6 +63,7 @@
             this.worldPos = new THREE.Vector3();
             this.hitCooldowns = new Map();
 
+            // Pinch events for picking things up
             this.onPinchStart = this.onPinchStart.bind(this);
             this.onPinchEnd = this.onPinchEnd.bind(this);
             this.el.addEventListener('pinchstarted', this.onPinchStart);
@@ -166,42 +167,59 @@
         }
     });
 
-    // --- MODULE 2: HAND-EXTENSION LOCOMOTION (SMOOTH LIKE BUTTER) ---
-    AFRAME.registerComponent('hand-locomotion', {
+    // --- MODULE 2: DUAL-PALM LOCOMOTION (SMOOTH LIKE BUTTER) ---
+    AFRAME.registerComponent('dual-palm-locomotion', {
         init: function () {
             this.camera = document.querySelector('a-camera');
-            this.rig = document.getElementById('rig');
-            this.handPos = new THREE.Vector3();
+            this.leftHand = document.querySelector('.left-hand');
+            this.rightHand = document.querySelector('.right-hand');
             this.camPos = new THREE.Vector3();
+            this.leftPos = new THREE.Vector3();
+            this.rightPos = new THREE.Vector3();
             this.moveDir = new THREE.Vector3();
             this.currentSpeed = 0; 
         },
         tick: function (time, timeDelta) {
-            if (!timeDelta || !gameStarted) return;
+            if (!timeDelta || !gameStarted || !this.leftHand || !this.rightHand) return;
 
-            const mesh = this.el.getObject3D('mesh');
-            if (!mesh || !mesh.visible) return;
+            const leftInteractions = this.leftHand.components['hand-interactions'];
+            const rightInteractions = this.rightHand.components['hand-interactions'];
 
-            this.el.object3D.getWorldPosition(this.handPos);
+            if (!leftInteractions || !rightInteractions) return;
+
+            const leftOpen = leftInteractions.isOpenHand;
+            const rightOpen = rightInteractions.isOpenHand;
+
             this.camera.object3D.getWorldPosition(this.camPos);
+            this.leftHand.object3D.getWorldPosition(this.leftPos);
+            this.rightHand.object3D.getWorldPosition(this.rightPos);
 
-            const interactions = this.el.components['hand-interactions'];
-            const isOpenHand = interactions ? interactions.isOpenHand : false;
+            // Require BOTH hands to be opened and lifted somewhat
+            const bothPalmsOpenAndUp = leftOpen && rightOpen && 
+                                       (this.leftPos.y > this.camPos.y - 0.6) && 
+                                       (this.rightPos.y > this.camPos.y - 0.6);
 
-            // Stop moving if hand is below chest OR if the palm is not openly shown
-            if (this.handPos.y < this.camPos.y - 0.6 || !isOpenHand) {
-                this.currentSpeed += (0 - this.currentSpeed) * 0.05; // Smooth deceleration
+            let targetSpeed = 0;
+
+            if (!bothPalmsOpenAndUp) {
+                targetSpeed = 0; // Will smoothly decelerate below
             } else {
                 this.camera.object3D.getWorldDirection(this.moveDir);
                 this.moveDir.y = 0; 
+
                 if (this.moveDir.lengthSq() > 0.001) {
                     this.moveDir.normalize();
 
-                    const dx = this.handPos.x - this.camPos.x;
-                    const dz = this.handPos.z - this.camPos.z;
+                    // Calculate the average position of both hands
+                    const avgX = (this.leftPos.x + this.rightPos.x) / 2;
+                    const avgZ = (this.leftPos.z + this.rightPos.z) / 2;
+
+                    const dx = avgX - this.camPos.x;
+                    const dz = avgZ - this.camPos.z;
+                    
+                    // How far forward are both hands pushed relative to where looking?
                     const forwardPush = dx * this.moveDir.x + dz * this.moveDir.z;
 
-                    let targetSpeed = 0;
                     if (forwardPush > 0.4) {
                         targetSpeed = (forwardPush - 0.4) * 0.8; 
                     } else if (forwardPush > -0.2 && forwardPush < 0.2) {
@@ -210,14 +228,20 @@
 
                     // Lock the maximum speed to exactly 0.18 for human walk speed
                     targetSpeed = Math.max(-0.18, Math.min(0.18, targetSpeed));
-
-                    // Smooth acceleration lerp (soft as butter)
-                    this.currentSpeed += (targetSpeed - this.currentSpeed) * 0.05;
                 }
             }
 
+            // Smooth acceleration lerp (soft as butter)
+            this.currentSpeed += (targetSpeed - this.currentSpeed) * 0.05;
+
+            // Apply movement to the rig
             if (Math.abs(this.currentSpeed) > 0.001) {
-                this.rig.object3D.position.addScaledVector(this.moveDir, this.currentSpeed * (timeDelta / 1000));
+                if (this.moveDir.lengthSq() < 0.001) {
+                    this.camera.object3D.getWorldDirection(this.moveDir);
+                    this.moveDir.y = 0;
+                    if (this.moveDir.lengthSq() > 0.001) this.moveDir.normalize();
+                }
+                this.el.object3D.position.addScaledVector(this.moveDir, this.currentSpeed * (timeDelta / 1000));
             }
         }
     });
@@ -380,7 +404,7 @@
     <p>Deadline Missed. Time to break everything.</p>
     
     <ul class="instructions">
-      <li><strong>Walk:</strong> Push an OPEN PALM forward, away from your body.</li>
+      <li><strong>Walk:</strong> Push BOTH OPEN PALMS forward, away from your body.</li>
       <li><strong>Grab & Throw:</strong> Pinch your index and thumb together on objects.</li>
       <li><strong>Punch:</strong> Make a fist and hit objects to shatter them.</li>
     </ul>
@@ -395,17 +419,18 @@
     </a-assets>
 
     <!-- THE RIG -->
-    <a-entity id="rig" position="0 0 5">
+    <a-entity id="rig" position="0 0 5" dual-palm-locomotion>
       <a-camera position="0 1.6 0" look-controls wasd-controls></a-camera>
 
       <!-- Left Hand -->
-      <a-entity hand-tracking-controls="hand: left" 
-                hand-interactions 
-                hand-locomotion>
+      <a-entity class="left-hand"
+                hand-tracking-controls="hand: left" 
+                hand-interactions>
       </a-entity>
 
       <!-- Right Hand -->
-      <a-entity hand-tracking-controls="hand: right" 
+      <a-entity class="right-hand"
+                hand-tracking-controls="hand: right" 
                 hand-interactions>
       </a-entity>
     </a-entity>
