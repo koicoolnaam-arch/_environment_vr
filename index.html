@@ -56,11 +56,12 @@
             this.grabbedEl = null;
             this.hoverEl = null;
             this.isFist = false;
+            this.isOpenHand = false; // Tracks open palm
             this.positions = [];
             this.velocity = new THREE.Vector3();
             this.handPos = new THREE.Vector3();
             this.worldPos = new THREE.Vector3();
-            this.hitCooldowns = new Map(); // Tracks last hit time to prevent rapid-fire
+            this.hitCooldowns = new Map();
 
             this.onPinchStart = this.onPinchStart.bind(this);
             this.onPinchEnd = this.onPinchEnd.bind(this);
@@ -83,6 +84,7 @@
                 this.grabbedEl.setAttribute('dynamic-body', 'type: dynamic');
                 const body = this.grabbedEl.components['dynamic-body']?.body;
                 if (body) {
+                    // Extract velocity to throw item
                     body.velocity.set(this.velocity.x * 2.5, this.velocity.y * 2.5, this.velocity.z * 2.5);
                 }
                 this.grabbedEl = null;
@@ -111,7 +113,9 @@
                     const bone = new THREE.Vector3().setFromMatrixPosition(mesh.skeleton.bones[i].matrixWorld);
                     maxDist = Math.max(maxDist, wrist.distanceTo(bone));
                 }
+                // Determine hand state based on finger distance from wrist
                 this.isFist = (maxDist > 0 && maxDist < 0.085);
+                this.isOpenHand = (maxDist > 0.11); // Open palm/fingers extended
             }
 
             if (this.grabbedEl) {
@@ -145,13 +149,13 @@
                 this.hoverEl.setAttribute('color', '#aaffaa'); 
             }
 
+            // Punch mechanics using fist
             if (this.isFist) {
                 document.querySelectorAll('.breakable, .grabbable').forEach(el => {
                     el.object3D.getWorldPosition(this.worldPos);
                     if (this.handPos.distanceTo(this.worldPos) < 0.25) {
                         const now = performance.now();
                         const lastHit = this.hitCooldowns.get(el) || 0;
-                        // 500ms cooldown requires distinct punches or holding the fist to register hits
                         if (now - lastHit > 500) { 
                             this.el.emit('hit', {target: el});
                             this.hitCooldowns.set(el, now);
@@ -170,7 +174,7 @@
             this.handPos = new THREE.Vector3();
             this.camPos = new THREE.Vector3();
             this.moveDir = new THREE.Vector3();
-            this.currentSpeed = 0; // Tracks smooth transitioning speed
+            this.currentSpeed = 0; 
         },
         tick: function (time, timeDelta) {
             if (!timeDelta || !gameStarted) return;
@@ -181,9 +185,12 @@
             this.el.object3D.getWorldPosition(this.handPos);
             this.camera.object3D.getWorldPosition(this.camPos);
 
-            if (this.handPos.y < this.camPos.y - 0.6) {
-                // If hand is down, smoothly come to a stop
-                this.currentSpeed += (0 - this.currentSpeed) * 0.05;
+            const interactions = this.el.components['hand-interactions'];
+            const isOpenHand = interactions ? interactions.isOpenHand : false;
+
+            // Stop moving if hand is below chest OR if the palm is not openly shown
+            if (this.handPos.y < this.camPos.y - 0.6 || !isOpenHand) {
+                this.currentSpeed += (0 - this.currentSpeed) * 0.05; // Smooth deceleration
             } else {
                 this.camera.object3D.getWorldDirection(this.moveDir);
                 this.moveDir.y = 0; 
@@ -201,29 +208,27 @@
                         targetSpeed = (forwardPush - 0.2) * 0.8; 
                     }
 
-                    // Lock the maximum speed to exactly 0.179 as requested
-                    targetSpeed = Math.max(-0.179, Math.min(0.179, targetSpeed));
+                    // Lock the maximum speed to exactly 0.18 for human walk speed
+                    targetSpeed = Math.max(-0.18, Math.min(0.18, targetSpeed));
 
-                    // SMOOTH LIKE BUTTER: Lerp the current speed towards the target speed
+                    // Smooth acceleration lerp (soft as butter)
                     this.currentSpeed += (targetSpeed - this.currentSpeed) * 0.05;
                 }
             }
 
-            // Apply movement if we are moving
             if (Math.abs(this.currentSpeed) > 0.001) {
                 this.rig.object3D.position.addScaledVector(this.moveDir, this.currentSpeed * (timeDelta / 1000));
             }
         }
     });
 
-    // --- MODULE 3: BREAKABLE LOGIC (FORCED TO 3 HITS) ---
+    // --- MODULE 3: BREAKABLE LOGIC (SHATTER IN MULTIPLE PIECES) ---
     AFRAME.registerComponent('smashable', {
       schema: {
         health: {type: 'number', default: 3},
         smashedColor: {type: 'color', default: '#555'}
       },
       init: function () {
-        // Enforce exactly 3 hits for all shatterable items regardless of HTML presets
         this.data.health = 3; 
 
         window.addEventListener('hit', (e) => {
@@ -245,18 +250,67 @@
             this.el.setAttribute('dynamic-body', 'type: dynamic');
         }
 
-        const currentScale = this.el.getAttribute('scale') || {x: 1, y: 1, z: 1};
-        this.el.setAttribute('scale', {
-          x: currentScale.x * 0.9,
-          y: currentScale.y * 0.9,
-          z: currentScale.z * 0.9
-        });
-
         if (this.data.health <= 0) {
-          this.el.setAttribute('color', this.data.smashedColor);
-          if (this.el.body) {
-            this.el.setAttribute('dynamic-body', 'type: dynamic; mass: 5');
-          }
+          // Instead of just turning gray, completely shatter into pieces!
+          this.shatter();
+        } else {
+          // Shrink slightly to show damage leading up to the shatter
+          const currentScale = this.el.getAttribute('scale') || {x: 1, y: 1, z: 1};
+          this.el.setAttribute('scale', {
+            x: currentScale.x * 0.9,
+            y: currentScale.y * 0.9,
+            z: currentScale.z * 0.9
+          });
+        }
+      },
+      shatter: function() {
+        const worldPos = new THREE.Vector3();
+        this.el.object3D.getWorldPosition(worldPos);
+        const scene = document.querySelector('a-scene');
+        
+        // Create 6-10 random debris pieces
+        const numPieces = 6 + Math.floor(Math.random() * 5);
+        const baseColor = this.data.smashedColor || '#555';
+
+        for (let i = 0; i < numPieces; i++) {
+            const piece = document.createElement('a-box');
+            const size = (Math.random() * 0.15 + 0.05).toFixed(2);
+            piece.setAttribute('width', size);
+            piece.setAttribute('height', size);
+            piece.setAttribute('depth', size);
+            
+            // Randomize spawn position slightly around the original object's center
+            piece.setAttribute('position', {
+                x: worldPos.x + (Math.random() - 0.5) * 0.4,
+                y: worldPos.y + (Math.random() - 0.5) * 0.4,
+                z: worldPos.z + (Math.random() - 0.5) * 0.4
+            });
+            piece.setAttribute('color', baseColor);
+            piece.setAttribute('dynamic-body', 'mass: 0.5');
+            
+            scene.appendChild(piece);
+            
+            // Wait for physics body to attach, then explode outward
+            piece.addEventListener('body-loaded', () => {
+                const explosionForce = new THREE.Vector3(
+                    (Math.random() - 0.5) * 6,
+                    Math.random() * 4 + 2, // Shoot upwards
+                    (Math.random() - 0.5) * 6
+                );
+                piece.body.velocity.copy(explosionForce);
+                
+                // Add some spinning torque
+                piece.body.angularVelocity.set(
+                    Math.random() * 10,
+                    Math.random() * 10,
+                    Math.random() * 10
+                );
+            });
+        }
+        
+        // Safely remove the original unsmashed object
+        if (this.el.parentNode) {
+            this.el.parentNode.removeChild(this.el);
         }
       }
     });
@@ -270,7 +324,6 @@
 
         window.addEventListener('hit', (e) => {
             if (e.detail.target === this.el) {
-                // Boss gets knocked out and falls when hit
                 this.isKnockedOut = true;
                 this.el.setAttribute('dynamic-body', 'type: dynamic; mass: 80');
             }
@@ -327,9 +380,9 @@
     <p>Deadline Missed. Time to break everything.</p>
     
     <ul class="instructions">
-      <li><strong>Walk:</strong> Push your LEFT hand forward, away from your body.</li>
+      <li><strong>Walk:</strong> Push an OPEN PALM forward, away from your body.</li>
       <li><strong>Grab & Throw:</strong> Pinch your index and thumb together on objects.</li>
-      <li><strong>Punch:</strong> Make a fist and hit objects to damage them.</li>
+      <li><strong>Punch:</strong> Make a fist and hit objects to shatter them.</li>
     </ul>
 
     <button id="start-btn" onclick="startGame()">ENTER OFFICE</button>
