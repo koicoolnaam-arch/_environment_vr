@@ -50,13 +50,13 @@
   <script>
     let gameStarted = false;
 
-    // --- MODULE 1: HAND INTERACTIONS (Grab & Punch) ---
+    // --- MODULE 1: HAND INTERACTIONS (Grab & Punch for BOTH hands) ---
     AFRAME.registerComponent('hand-interactions', {
         init: function () {
             this.grabbedEl = null;
             this.hoverEl = null;
             this.isFist = false;
-            this.isOpenHand = false; // Tracks open palm
+            this.isOpenHand = false; 
             this.positions = [];
             this.velocity = new THREE.Vector3();
             this.handPos = new THREE.Vector3();
@@ -119,6 +119,7 @@
                 this.isOpenHand = (maxDist > 0.11); // Open palm/fingers extended
             }
 
+            // Grab Mechanic - Lock to hand
             if (this.grabbedEl) {
                 const offset = new THREE.Vector3(0, -0.05, -0.05).applyQuaternion(this.el.object3D.quaternion);
                 const targetPos = this.handPos.clone().add(offset);
@@ -132,6 +133,7 @@
                 return;
             }
 
+            // Hover Detection
             let closest = null;
             let minDist = Infinity;
             document.querySelectorAll('.grabbable').forEach(el => {
@@ -167,7 +169,7 @@
         }
     });
 
-    // --- MODULE 2: DUAL-PALM LOCOMOTION (SMOOTH LIKE BUTTER) ---
+    // --- MODULE 2: RIG-ATTACHED LOCOMOTION (SPEED: 0.175) ---
     AFRAME.registerComponent('dual-palm-locomotion', {
         init: function () {
             this.camera = document.querySelector('a-camera');
@@ -178,6 +180,8 @@
             this.rightPos = new THREE.Vector3();
             this.moveDir = new THREE.Vector3();
             this.currentSpeed = 0; 
+            // Requested fixed speed
+            this.maxSpeed = 0.175; 
         },
         tick: function (time, timeDelta) {
             if (!timeDelta || !gameStarted || !this.leftHand || !this.rightHand) return;
@@ -194,47 +198,37 @@
             this.leftHand.object3D.getWorldPosition(this.leftPos);
             this.rightHand.object3D.getWorldPosition(this.rightPos);
 
-            // Require BOTH hands to be opened and lifted somewhat
-            const bothPalmsOpenAndUp = leftOpen && rightOpen && 
-                                       (this.leftPos.y > this.camPos.y - 0.6) && 
-                                       (this.rightPos.y > this.camPos.y - 0.6);
-
+            // Trigger: Both hands open, and pushed away/showing back of palms
+            const bothPalmsOpen = leftOpen && rightOpen;
             let targetSpeed = 0;
 
-            if (!bothPalmsOpenAndUp) {
-                targetSpeed = 0; // Will smoothly decelerate below
-            } else {
+            if (bothPalmsOpen) {
                 this.camera.object3D.getWorldDirection(this.moveDir);
                 this.moveDir.y = 0; 
 
                 if (this.moveDir.lengthSq() > 0.001) {
                     this.moveDir.normalize();
 
-                    // Calculate the average position of both hands
+                    // Calculate the average position of both hands relative to the camera
                     const avgX = (this.leftPos.x + this.rightPos.x) / 2;
                     const avgZ = (this.leftPos.z + this.rightPos.z) / 2;
-
                     const dx = avgX - this.camPos.x;
                     const dz = avgZ - this.camPos.z;
                     
-                    // How far forward are both hands pushed relative to where looking?
+                    // Measure how far hands are pushed away from the body (in the direction we are looking)
                     const forwardPush = dx * this.moveDir.x + dz * this.moveDir.z;
 
-                    if (forwardPush > 0.4) {
-                        targetSpeed = (forwardPush - 0.4) * 0.8; 
-                    } else if (forwardPush > -0.2 && forwardPush < 0.2) {
-                        targetSpeed = (forwardPush - 0.2) * 0.8; 
+                    // If hands are extended away from the body (simulating backs of palms to face)
+                    if (forwardPush > 0.3) {
+                        targetSpeed = this.maxSpeed; // Exactly 0.175
                     }
-
-                    // Lock the maximum speed to exactly 0.18 for human walk speed
-                    targetSpeed = Math.max(-0.18, Math.min(0.18, targetSpeed));
                 }
             }
 
-            // Smooth acceleration lerp (soft as butter)
-            this.currentSpeed += (targetSpeed - this.currentSpeed) * 0.05;
+            // Smooth acceleration lerp to prevent jerking
+            this.currentSpeed += (targetSpeed - this.currentSpeed) * 0.1;
 
-            // Apply movement to the rig
+            // Apply movement to the rig itself (keeps hands attached to the body)
             if (Math.abs(this.currentSpeed) > 0.001) {
                 if (this.moveDir.lengthSq() < 0.001) {
                     this.camera.object3D.getWorldDirection(this.moveDir);
@@ -275,10 +269,8 @@
         }
 
         if (this.data.health <= 0) {
-          // Instead of just turning gray, completely shatter into pieces!
           this.shatter();
         } else {
-          // Shrink slightly to show damage leading up to the shatter
           const currentScale = this.el.getAttribute('scale') || {x: 1, y: 1, z: 1};
           this.el.setAttribute('scale', {
             x: currentScale.x * 0.9,
@@ -292,7 +284,6 @@
         this.el.object3D.getWorldPosition(worldPos);
         const scene = document.querySelector('a-scene');
         
-        // Create 6-10 random debris pieces
         const numPieces = 6 + Math.floor(Math.random() * 5);
         const baseColor = this.data.smashedColor || '#555';
 
@@ -303,7 +294,6 @@
             piece.setAttribute('height', size);
             piece.setAttribute('depth', size);
             
-            // Randomize spawn position slightly around the original object's center
             piece.setAttribute('position', {
                 x: worldPos.x + (Math.random() - 0.5) * 0.4,
                 y: worldPos.y + (Math.random() - 0.5) * 0.4,
@@ -314,16 +304,14 @@
             
             scene.appendChild(piece);
             
-            // Wait for physics body to attach, then explode outward
             piece.addEventListener('body-loaded', () => {
                 const explosionForce = new THREE.Vector3(
                     (Math.random() - 0.5) * 6,
-                    Math.random() * 4 + 2, // Shoot upwards
+                    Math.random() * 4 + 2, 
                     (Math.random() - 0.5) * 6
                 );
                 piece.body.velocity.copy(explosionForce);
                 
-                // Add some spinning torque
                 piece.body.angularVelocity.set(
                     Math.random() * 10,
                     Math.random() * 10,
@@ -332,14 +320,13 @@
             });
         }
         
-        // Safely remove the original unsmashed object
         if (this.el.parentNode) {
             this.el.parentNode.removeChild(this.el);
         }
       }
     });
 
-    // --- MODULE 4: BOSS PHYSICS MOVEMENT (FIXED TIPPING) ---
+    // --- MODULE 4: BOSS PHYSICS MOVEMENT ---
     AFRAME.registerComponent('boss-behavior', {
       init: function () {
         this.targetPos = new THREE.Vector3();
@@ -404,9 +391,9 @@
     <p>Deadline Missed. Time to break everything.</p>
     
     <ul class="instructions">
-      <li><strong>Walk:</strong> Push BOTH OPEN PALMS forward, away from your body.</li>
-      <li><strong>Grab & Throw:</strong> Pinch your index and thumb together on objects.</li>
-      <li><strong>Punch:</strong> Make a fist and hit objects to shatter them.</li>
+      <li><strong>Walk:</strong> Push BOTH hands away from your body (showing back of palms).</li>
+      <li><strong>Grab & Throw:</strong> Pinch index & thumb together on either hand.</li>
+      <li><strong>Punch:</strong> Make a fist with either hand to shatter objects.</li>
     </ul>
 
     <button id="start-btn" onclick="startGame()">ENTER OFFICE</button>
@@ -418,7 +405,7 @@
       <img id="checker-tex" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='256' height='256'%3E%3Crect width='128' height='128' fill='%23e0e0e0'/%3E%3Crect x='128' y='128' width='128' height='128' fill='%23e0e0e0'/%3E%3Crect x='128' width='128' height='128' fill='%23333333'/%3E%3Crect y='128' width='128' height='128' fill='%23333333'/%3E%3C/svg%3E" crossorigin="anonymous">
     </a-assets>
 
-    <!-- THE RIG -->
+    <!-- THE RIG (Controls body attachment and locomotion) -->
     <a-entity id="rig" position="0 0 5" dual-palm-locomotion>
       <a-camera position="0 1.6 0" look-controls wasd-controls></a-camera>
 
@@ -448,17 +435,12 @@
       <a-box position="0 4 0" width="16" height="0.1" depth="16" color="#fff" static-body></a-box>
     </a-entity>
 
-    <!-- Printers and Filing Cabinets -->
     <!-- Printer -->
     <a-entity class="breakable grabbable" position="0 0.5 -7.2" dynamic-body="mass: 30" smashable="health: 6; smashedColor: #333">
-      <!-- Base -->
       <a-box width="1.5" height="1" depth="1" color="#f4f4f4"></a-box>
-      <!-- Glass top Scanner -->
       <a-box position="0 0.55 0" width="1.4" height="0.1" depth="0.9" color="#2b2b2b"></a-box>
       <a-box position="0 0.56 0" width="1.2" height="0.1" depth="0.7" color="#add8e6"></a-box>
-      <!-- Control Panel -->
       <a-box position="-0.5 0.6 0.4" width="0.3" height="0.05" depth="0.2" color="#111" rotation="15 0 0"></a-box>
-      <!-- Paper Tray out -->
       <a-box position="0.8 0.1 0" width="0.4" height="0.1" depth="0.6" color="#ddd"></a-box>
     </a-entity>
 
@@ -546,7 +528,7 @@
       </script>
     </a-entity>
 
-    <!-- Boss (Fixed Physics and Float) -->
+    <!-- Boss -->
     <a-entity id="boss" class="breakable" position="0 0.4 -4" boss-behavior dynamic-body="type: kinematic; mass: 80" smashable="health: 12; smashedColor: #ff0000">
       <a-box position="0 0.6 0" width="0.6" height="1.0" depth="0.4" color="#00008B"></a-box>
       <a-box position="0 1.3 0" width="0.35" height="0.35" depth="0.35" color="#ffe0bd"></a-box>
@@ -554,14 +536,12 @@
       <a-cylinder position="0.15 0.0 0" radius="0.1" height="0.8" color="#000"></a-cylinder>
     </a-entity>
 
-    <!-- Weapons (Grabbable) -->
-    <a-entity id="bat" class="weapon grabbable" position="5.5 1.0 -2" 
-              dynamic-body="mass: 2">
+    <!-- Weapons -->
+    <a-entity id="bat" class="weapon grabbable" position="5.5 1.0 -2" dynamic-body="mass: 2">
       <a-cylinder radius="0.03" height="0.8" color="#8B4513" rotation="0 0 10"></a-cylinder>
     </a-entity>
 
-    <a-entity id="hammer" class="weapon grabbable" position="5.3 1.0 -2.5" 
-              dynamic-body="mass: 4">
+    <a-entity id="hammer" class="weapon grabbable" position="5.3 1.0 -2.5" dynamic-body="mass: 4">
       <a-entity rotation="90 0 0">
         <a-cylinder radius="0.02" height="0.4" color="#444"></a-cylinder>
         <a-box position="0 0.2 0" width="0.15" height="0.1" depth="0.1" color="#222"></a-box>
