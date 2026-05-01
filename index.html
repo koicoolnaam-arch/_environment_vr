@@ -139,8 +139,8 @@
                     const camPos = new THREE.Vector3();
                     cameraEl.object3D.getWorldPosition(camPos);
                     const toCamera = new THREE.Vector3().subVectors(camPos, this.handPos).normalize();
-                    // If dot product > 0, the back of the hand points towards the user's face
-                    this.isBackFacingCamera = backOfHandNormal.dot(toCamera) > 0.2;
+                    // Much more forgiving normal check - allows for natural hand tilt while pushing
+                    this.isBackFacingCamera = backOfHandNormal.dot(toCamera) > -0.2;
                 }
             }
 
@@ -196,8 +196,6 @@
             this.leftHand = document.querySelector('.left-hand');
             this.rightHand = document.querySelector('.right-hand');
             this.camPos = new THREE.Vector3();
-            this.leftPos = new THREE.Vector3();
-            this.rightPos = new THREE.Vector3();
             this.moveDir = new THREE.Vector3();
             this.currentSpeed = 0; 
         },
@@ -213,22 +211,19 @@
             const leftValid = leftInteractions.isOpenHand && leftInteractions.isBackFacingCamera;
             const rightValid = rightInteractions.isOpenHand && rightInteractions.isBackFacingCamera;
 
-            this.camera.object3D.getWorldPosition(this.camPos);
-            this.leftHand.object3D.getWorldPosition(this.leftPos);
-            this.rightHand.object3D.getWorldPosition(this.rightPos);
-
             let targetSpeed = 0;
 
             if (leftValid && rightValid) {
+                this.camera.object3D.getWorldPosition(this.camPos);
                 this.camera.object3D.getWorldDirection(this.moveDir);
                 this.moveDir.y = 0; 
 
                 if (this.moveDir.lengthSq() > 0.001) {
                     this.moveDir.normalize();
 
-                    // Calculate the average position of both hands
-                    const avgX = (this.leftPos.x + this.rightPos.x) / 2;
-                    const avgZ = (this.leftPos.z + this.rightPos.z) / 2;
+                    // Calculate the average position of both hands directly from calculated vectors
+                    const avgX = (leftInteractions.handPos.x + rightInteractions.handPos.x) / 2;
+                    const avgZ = (leftInteractions.handPos.z + rightInteractions.handPos.z) / 2;
 
                     const dx = avgX - this.camPos.x;
                     const dz = avgZ - this.camPos.z;
@@ -236,8 +231,8 @@
                     // How far forward are both hands pushed relative to where looking?
                     const forwardPush = dx * this.moveDir.x + dz * this.moveDir.z;
 
-                    // If hands are pushed away from the body
-                    if (forwardPush > 0.3) {
+                    // Reduced threshold to 0.2m so it triggers easily when pushing hands out
+                    if (forwardPush > 0.2) {
                         targetSpeed = 0.175; // Strict locomotion speed
                     }
                 }
