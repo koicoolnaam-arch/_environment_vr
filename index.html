@@ -147,7 +147,7 @@
         }
 
         const mesh = this.el.getObject3D('mesh');
-        if (mesh && mesh.skeleton) {
+        if (mesh && mesh.skeleton && mesh.skeleton.bones.length > 0) {
           const wristMatrix = mesh.skeleton.bones.matrixWorld;
           const wristPos = new THREE.Vector3().setFromMatrixPosition(wristMatrix);
           let maxDist = 0;
@@ -247,8 +247,8 @@
             const rightDist = rightInteractions.handPos.distanceTo(this.camPos);
             const avgDist = (leftDist + rightDist) / 2;
 
-            // Push hands away (> 0.4m) -> Move Forward at exact speed requested
-            if (avgDist > 0.4) {
+            // Push hands away (> 0.2m) -> Move Forward at exact speed requested
+            if (avgDist > 0.2) {
                speed = 0.150; 
             }
             // Pull hands close (< 0.2m) -> Move Backward
@@ -258,14 +258,15 @@
           }
         }
 
-        // Apply movement vector directly 
+        // Apply movement vector directly using delta time for smooth performance
         if (Math.abs(speed) > 0) {
           this.camera.object3D.getWorldDirection(this.moveDir);
           this.moveDir.y = 0; // Lock to horizontal movement only
           
           if (this.moveDir.lengthSq() > 0.001) {
             this.moveDir.normalize();
-            this.el.object3D.position.addScaledVector(this.moveDir, speed);
+            // Scale movement with timeDelta to prevent VR physics breaking
+            this.el.object3D.position.addScaledVector(this.moveDir, speed * (timeDelta / 16));
           }
         }
       }
