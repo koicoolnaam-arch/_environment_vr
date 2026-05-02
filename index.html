@@ -57,10 +57,10 @@
 
         const clock = new THREE.Clock();
 
-        // Room Dimensions (meters) - DOUBLED SIZE
-        const ROOM_X = 7.32; // 24 ft
-        const ROOM_Y = 4.88; // 16 ft
-        const ROOM_Z = 6.10; // 20 ft
+        // Room Dimensions (meters) - EXPANDED SIZE
+        const ROOM_X = 14.64; // Much wider
+        const ROOM_Y = 4.88;  // Height unchanged
+        const ROOM_Z = 24.40; // Extremely deep to leave the back empty
 
         init();
         setupOffice();
@@ -81,8 +81,8 @@
             playerGroup = new THREE.Group();
             scene.add(playerGroup);
             playerGroup.add(camera);
-            // Start at the back of the room in the middle
-            playerGroup.position.set(0, 0, ROOM_Z / 2 - 1.0); 
+            // Start at the back of the newly expanded room in the middle
+            playerGroup.position.set(0, 0, ROOM_Z / 2 - 2.0); 
 
             // Player Avatar Body
             const bodyGeo = new THREE.CylinderGeometry(0.2, 0.2, 1.4, 16);
@@ -115,15 +115,17 @@
             dirLight.castShadow = true;
             dirLight.shadow.mapSize.width = 2048;
             dirLight.shadow.mapSize.height = 2048;
-            dirLight.shadow.camera.top = 5;
-            dirLight.shadow.camera.bottom = -5;
-            dirLight.shadow.camera.left = -5;
-            dirLight.shadow.camera.right = 5;
+            // Expand shadow camera size to cover the huge room
+            dirLight.shadow.camera.top = 15;
+            dirLight.shadow.camera.bottom = -15;
+            dirLight.shadow.camera.left = -15;
+            dirLight.shadow.camera.right = 15;
             scene.add(dirLight);
 
-            // Point lights for corners
-            const pLight1 = new THREE.PointLight(0xffffff, 0.3, 8); pLight1.position.set(2.5, 3.2, 2.2); scene.add(pLight1);
-            const pLight2 = new THREE.PointLight(0xffffff, 0.3, 8); pLight2.position.set(-2.5, 3.2, -2.2); scene.add(pLight2);
+            // Point lights spaced out to fill the larger room
+            const pLight1 = new THREE.PointLight(0xffffff, 0.3, 15); pLight1.position.set(5, 3.2, 5); scene.add(pLight1);
+            const pLight2 = new THREE.PointLight(0xffffff, 0.3, 15); pLight2.position.set(-5, 3.2, -5); scene.add(pLight2);
+            const pLight3 = new THREE.PointLight(0xffffff, 0.3, 15); pLight3.position.set(0, 3.2, 8); scene.add(pLight3); // Backlight
 
             // 2. Room Geometry (Walls, Floor, Ceiling)
             const floorGeo = new THREE.PlaneGeometry(ROOM_X, ROOM_Z);
@@ -156,11 +158,12 @@
             const deskH = 0.75;
             const deskD = 0.6;
 
-            // Spaced out for the doubled room
-            const startX = -2.4;
-            const stepX = 1.2;
-            const startZ = -1.8;
-            const stepZ = 1.8;
+            // Vastly increased spacing, heavily offset towards the "front" (negative Z)
+            // to leave the "back" (positive Z) completely empty
+            const startX = -4.0;
+            const stepX = 2.0;
+            const startZ = -8.0;
+            const stepZ = 3.0;
 
             for (let i = 0; i < 5; i++) {
                 for (let j = 0; j < 3; j++) {
@@ -170,21 +173,21 @@
                 }
             }
 
-            // 4. Printer (Right Side)
+            // 4. Printer (Right Side, pushed further back)
             const printerGeo = new THREE.BoxGeometry(0.5, 0.4, 0.5);
             const printerMat = new THREE.MeshStandardMaterial({ color: 0xdddddd });
             const printer = new THREE.Mesh(printerGeo, printerMat);
-            printer.position.set(ROOM_X/2 - 0.6, 0.2, 0);
+            printer.position.set(ROOM_X/2 - 1.0, 0.2, -4);
             printer.castShadow = true; printer.receiveShadow = true;
             makeInteractable(printer);
             scene.add(printer);
 
-            // 5. Filing Cabinets (Left Side)
+            // 5. Filing Cabinets (Left Side, pushed further back)
             const cabGeo = new THREE.BoxGeometry(0.46, 0.91, 0.46);
             const cabMat = new THREE.MeshStandardMaterial({ color: 0x4F4F4F, metalness: 0.6, roughness: 0.4 });
             for(let k=0; k<2; k++) {
                 const cabinet = new THREE.Mesh(cabGeo, cabMat);
-                cabinet.position.set(-ROOM_X/2 + 0.6, 0.455, -0.5 + k*0.8);
+                cabinet.position.set(-ROOM_X/2 + 1.0, 0.455, -5.0 + k*1.0);
                 cabinet.castShadow = true; cabinet.receiveShadow = true;
                 makeInteractable(cabinet);
                 scene.add(cabinet);
@@ -199,7 +202,8 @@
             ctx.fillText("Use hands to interact with all solid objects in the office.", 512, 128);
             const tex = new THREE.CanvasTexture(canvas);
             const uiPlane = new THREE.Mesh(new THREE.PlaneGeometry(3, 0.75), new THREE.MeshBasicMaterial({map: tex}));
-            uiPlane.position.set(0, 3, -ROOM_Z/2 + 0.05);
+            uiPlane.position.set(0, 3, ROOM_Z/2 - 0.05);
+            uiPlane.rotation.y = Math.PI; // Face the player at spawn
             scene.add(uiPlane);
         }
 
@@ -221,7 +225,7 @@
             ctx.fillRect(0,0,512,512); ctx.fillRect(512,512,512,512);
             const tex = new THREE.CanvasTexture(canvas);
             tex.wrapS = THREE.RepeatWrapping; tex.wrapT = THREE.RepeatWrapping;
-            tex.repeat.set(12, 10); // Scaled for larger room
+            tex.repeat.set(24, 40); // Adjusted tiling for the massive new room size
             tex.magFilter = THREE.NearestFilter;
             return tex;
         }
@@ -270,7 +274,7 @@
 
             // CHAIR GROUP (Separate to pull chair out dynamically)
             const chairGroup = new THREE.Group();
-            chairGroup.position.set(x, 0, z + d/2 + 0.3);
+            chairGroup.position.set(x, 0, z + d/2 + 0.4); // slightly more pushed back
             
             const seat = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.05, 0.4), woodMat);
             seat.position.y = 0.4; seat.castShadow = true; seat.receiveShadow = true;
@@ -359,12 +363,12 @@
             makeInteractable(boss.userData.lArm, boss);
             makeInteractable(boss.userData.rArm, boss);
 
-            // Waypoints around the wider room edges
+            // Updated Waypoints around the newly expanded perimeter
             bossWaypoints = [
-                new THREE.Vector3(ROOM_X/2 - 0.8, 0, ROOM_Z/2 - 0.8),
-                new THREE.Vector3(-ROOM_X/2 + 0.8, 0, ROOM_Z/2 - 0.8),
-                new THREE.Vector3(-ROOM_X/2 + 0.8, 0, -ROOM_Z/2 + 0.8),
-                new THREE.Vector3(ROOM_X/2 - 0.8, 0, -ROOM_Z/2 + 0.8)
+                new THREE.Vector3(ROOM_X/2 - 1.5, 0, ROOM_Z/2 - 1.5),
+                new THREE.Vector3(-ROOM_X/2 + 1.5, 0, ROOM_Z/2 - 1.5),
+                new THREE.Vector3(-ROOM_X/2 + 1.5, 0, -ROOM_Z/2 + 1.5),
+                new THREE.Vector3(ROOM_X/2 - 1.5, 0, -ROOM_Z/2 + 1.5)
             ];
             boss.position.copy(bossWaypoints);
         }
