@@ -51,17 +51,16 @@
         
         // Hand Tracking & Gesture States
         let handStates = {
-            0: { isPinching: false, isFist: false, grabbedObj: null, velocity: new THREE.Vector3(), prevPos: new THREE.Vector3(), cooldown: 0 },
-            1: { isPinching: false, isFist: false, grabbedObj: null, velocity: new THREE.Vector3(), prevPos: new THREE.Vector3(), cooldown: 0 }
+            0: { isPinching: false, isFist: false, grabbedObj: null, grabOffset: new THREE.Vector3(), velocity: new THREE.Vector3(), prevPos: new THREE.Vector3(), cooldown: 0 },
+            1: { isPinching: false, isFist: false, grabbedObj: null, grabOffset: new THREE.Vector3(), velocity: new THREE.Vector3(), prevPos: new THREE.Vector3(), cooldown: 0 }
         };
-        let prevMidPoint = new THREE.Vector3();
 
         const clock = new THREE.Clock();
 
-        // Room Dimensions (meters)
-        const ROOM_X = 3.66; // 12 ft
-        const ROOM_Y = 2.44; // 8 ft
-        const ROOM_Z = 3.05; // 10 ft
+        // Room Dimensions (meters) - DOUBLED SIZE
+        const ROOM_X = 7.32; // 24 ft
+        const ROOM_Y = 4.88; // 16 ft
+        const ROOM_Z = 6.10; // 20 ft
 
         init();
         setupOffice();
@@ -100,7 +99,7 @@
             container.appendChild(renderer.domElement);
 
             document.body.appendChild(VRButton.createButton(renderer));
-            document.getElementById('info').innerHTML = "Enter XR to start.<br>Gestures: Pinch to Grab/Throw | Fist to Punch/Shatter | Hands together & push to Move";
+            document.getElementById('info').innerHTML = "Enter XR to start.<br>Show back of palms to move | Pinch to Pick Up Any Object | Fist to Punch/Shatter";
 
             window.addEventListener('resize', onWindowResize);
         }
@@ -115,15 +114,15 @@
             dirLight.castShadow = true;
             dirLight.shadow.mapSize.width = 2048;
             dirLight.shadow.mapSize.height = 2048;
-            dirLight.shadow.camera.top = 3;
-            dirLight.shadow.camera.bottom = -3;
-            dirLight.shadow.camera.left = -3;
-            dirLight.shadow.camera.right = 3;
+            dirLight.shadow.camera.top = 5;
+            dirLight.shadow.camera.bottom = -5;
+            dirLight.shadow.camera.left = -5;
+            dirLight.shadow.camera.right = 5;
             scene.add(dirLight);
 
             // Point lights for corners
-            const pLight1 = new THREE.PointLight(0xffffff, 0.3, 5); pLight1.position.set(1.5, 2.2, 1.2); scene.add(pLight1);
-            const pLight2 = new THREE.PointLight(0xffffff, 0.3, 5); pLight2.position.set(-1.5, 2.2, -1.2); scene.add(pLight2);
+            const pLight1 = new THREE.PointLight(0xffffff, 0.3, 8); pLight1.position.set(2.5, 3.2, 2.2); scene.add(pLight1);
+            const pLight2 = new THREE.PointLight(0xffffff, 0.3, 8); pLight2.position.set(-2.5, 3.2, -2.2); scene.add(pLight2);
 
             // 2. Room Geometry (Walls, Floor, Ceiling)
             const floorGeo = new THREE.PlaneGeometry(ROOM_X, ROOM_Z);
@@ -152,15 +151,15 @@
             const deskWoodMat = new THREE.MeshStandardMaterial({ color: 0x4A2C1A, roughness: 0.4, metalness: 0.1 });
             const laptopMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.5 });
             
-            // Adjust desk sizing to fit 5 columns in 3.66m. Max width ~0.6m per desk.
-            const deskW = 0.6; 
+            const deskW = 1.0; 
             const deskH = 0.75;
-            const deskD = 0.5;
+            const deskD = 0.6;
 
-            const startX = -1.2;
-            const stepX = 0.6;
-            const startZ = -0.9;
-            const stepZ = 0.9;
+            // Spaced out for the doubled room
+            const startX = -2.4;
+            const stepX = 1.2;
+            const startZ = -1.8;
+            const stepZ = 1.8;
 
             for (let i = 0; i < 5; i++) {
                 for (let j = 0; j < 3; j++) {
@@ -174,7 +173,7 @@
             const printerGeo = new THREE.BoxGeometry(0.5, 0.4, 0.5);
             const printerMat = new THREE.MeshStandardMaterial({ color: 0xdddddd });
             const printer = new THREE.Mesh(printerGeo, printerMat);
-            printer.position.set(ROOM_X/2 - 0.4, 0.2, 0);
+            printer.position.set(ROOM_X/2 - 0.6, 0.2, 0);
             printer.castShadow = true; printer.receiveShadow = true;
             makeInteractable(printer);
             scene.add(printer);
@@ -184,7 +183,7 @@
             const cabMat = new THREE.MeshStandardMaterial({ color: 0x4F4F4F, metalness: 0.6, roughness: 0.4 });
             for(let k=0; k<2; k++) {
                 const cabinet = new THREE.Mesh(cabGeo, cabMat);
-                cabinet.position.set(-ROOM_X/2 + 0.3, 0.455, -0.5 + k*0.6);
+                cabinet.position.set(-ROOM_X/2 + 0.6, 0.455, -0.5 + k*0.8);
                 cabinet.castShadow = true; cabinet.receiveShadow = true;
                 makeInteractable(cabinet);
                 scene.add(cabinet);
@@ -196,10 +195,10 @@
             const ctx = canvas.getContext('2d');
             ctx.fillStyle = 'black'; ctx.fillRect(0,0,1024,256);
             ctx.fillStyle = 'white'; ctx.font = '50px sans-serif'; ctx.textAlign = 'center';
-            ctx.fillText("Use thumbstick to move | A button to teleport | Hands tracked automatically", 512, 128);
+            ctx.fillText("Use hands to interact with all solid objects in the office.", 512, 128);
             const tex = new THREE.CanvasTexture(canvas);
-            const uiPlane = new THREE.Mesh(new THREE.PlaneGeometry(2, 0.5), new THREE.MeshBasicMaterial({map: tex}));
-            uiPlane.position.set(0, 2, -ROOM_Z/2 + 0.05);
+            const uiPlane = new THREE.Mesh(new THREE.PlaneGeometry(3, 0.75), new THREE.MeshBasicMaterial({map: tex}));
+            uiPlane.position.set(0, 3, -ROOM_Z/2 + 0.05);
             scene.add(uiPlane);
         }
 
@@ -221,22 +220,22 @@
             ctx.fillRect(0,0,512,512); ctx.fillRect(512,512,512,512);
             const tex = new THREE.CanvasTexture(canvas);
             tex.wrapS = THREE.RepeatWrapping; tex.wrapT = THREE.RepeatWrapping;
-            tex.repeat.set(6, 5); // To make 12x10 grid on the room size
+            tex.repeat.set(12, 10); // Scaled for larger room
             tex.magFilter = THREE.NearestFilter;
             return tex;
         }
 
         function createDeskUnit(x, z, w, h, d, woodMat, lapMat) {
-            const group = new THREE.Group();
-            group.position.set(x, 0, z);
+            // DESK GROUP
+            const deskGroup = new THREE.Group();
+            deskGroup.position.set(x, 0, z);
 
-            // Top
             const top = new THREE.Mesh(new THREE.BoxGeometry(w, 0.05, d), woodMat);
             top.position.y = h;
             top.castShadow = true; top.receiveShadow = true;
-            group.add(top);
+            deskGroup.add(top);
+            makeInteractable(top, deskGroup);
             
-            // Legs
             const legGeo = new THREE.BoxGeometry(0.05, h, 0.05);
             const positions = [
                 [-w/2+0.05, h/2, -d/2+0.05], [w/2-0.05, h/2, -d/2+0.05],
@@ -246,32 +245,41 @@
                 const leg = new THREE.Mesh(legGeo, woodMat);
                 leg.position.set(...p);
                 leg.castShadow = true; leg.receiveShadow = true;
-                group.add(leg);
+                deskGroup.add(leg);
+                makeInteractable(leg, deskGroup);
             });
+            scene.add(deskGroup);
 
-            // Laptop
+            // LAPTOP GROUP (Separate so it can be picked up individually)
+            const lapGroup = new THREE.Group();
+            lapGroup.position.set(x, h + 0.01, z);
+
             const lapBase = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.02, 0.2), lapMat);
-            lapBase.position.set(0, h + 0.01, 0);
             lapBase.castShadow = true;
-            group.add(lapBase);
+            lapGroup.add(lapBase);
+            makeInteractable(lapBase, lapGroup);
 
             const lapScreen = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.2, 0.02), lapMat);
-            lapScreen.position.set(0, h + 0.1, -0.09);
+            lapScreen.position.set(0, 0.1, -0.09);
             lapScreen.rotation.x = -0.1;
             lapScreen.castShadow = true;
-            group.add(lapScreen);
+            lapGroup.add(lapScreen);
+            makeInteractable(lapScreen, lapGroup);
+            scene.add(lapGroup);
 
-            // Chair (Behind desk, +Z direction because boss walks around)
+            // CHAIR GROUP (Separate to pull chair out dynamically)
             const chairGroup = new THREE.Group();
-            chairGroup.position.set(0, 0, d/2 + 0.2);
+            chairGroup.position.set(x, 0, z + d/2 + 0.3);
             
             const seat = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.05, 0.4), woodMat);
             seat.position.y = 0.4; seat.castShadow = true; seat.receiveShadow = true;
             chairGroup.add(seat);
+            makeInteractable(seat, chairGroup);
 
             const back = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.4, 0.05), woodMat);
             back.position.set(0, 0.6, 0.18); back.castShadow = true;
             chairGroup.add(back);
+            makeInteractable(back, chairGroup);
 
             const chairLeg = new THREE.BoxGeometry(0.04, 0.4, 0.04);
             const clPos = [
@@ -282,36 +290,29 @@
                 const l = new THREE.Mesh(chairLeg, woodMat);
                 l.position.set(...p); l.castShadow = true;
                 chairGroup.add(l);
+                makeInteractable(l, chairGroup);
             });
-
-            group.add(chairGroup);
-
-            scene.add(group);
-            
-            // Make components interactable independently
-            makeInteractable(top, group);
-            makeInteractable(lapBase, group);
-            makeInteractable(seat, chairGroup);
+            scene.add(chairGroup);
         }
 
         function makeInteractable(mesh, parentGroup = null) {
             mesh.userData.isInteractable = true;
             mesh.userData.punchCount = 0;
             mesh.userData.originalMat = mesh.material;
-            mesh.userData.parentGroup = parentGroup; // To move entire desk if grabbed
-            interactables.push(mesh);
+            mesh.userData.parentGroup = parentGroup; // Links to entire object structure
+            if (!interactables.includes(mesh)) {
+                interactables.push(mesh);
+            }
         }
 
         function setupBoss() {
             boss = new THREE.Group();
             
-            // Materials
             const skinMat = new THREE.MeshStandardMaterial({ color: 0xffccaa });
             const coatMat = new THREE.MeshStandardMaterial({ color: 0x2C3E66 });
             const shirtMat = new THREE.MeshStandardMaterial({ color: 0xffffff });
             const tieMat = new THREE.MeshStandardMaterial({ color: 0xB22222 });
             const pantsMat = new THREE.MeshStandardMaterial({ color: 0x5D3A1A });
-            const shoeMat = new THREE.MeshStandardMaterial({ color: 0x111111 });
             const hairMat = new THREE.MeshStandardMaterial({ color: 0x111111 });
 
             // Head & Face
@@ -323,7 +324,6 @@
             hair.position.y = 0.15;
             head.add(hair);
 
-            // Mean eyebrows
             const browGeo = new THREE.BoxGeometry(0.06, 0.01, 0.01);
             const lBrow = new THREE.Mesh(browGeo, hairMat); lBrow.position.set(-0.04, 0.05, 0.105); lBrow.rotation.z = -0.2;
             const rBrow = new THREE.Mesh(browGeo, hairMat); rBrow.position.set(0.04, 0.05, 0.105); rBrow.rotation.z = 0.2;
@@ -351,14 +351,19 @@
             boss.userData.rLeg = new THREE.Mesh(legGeo, pantsMat); boss.userData.rLeg.position.set(0.1, 0.45, 0); boss.userData.rLeg.castShadow = true; boss.add(boss.userData.rLeg);
 
             scene.add(boss);
-            makeInteractable(torso, boss); // Can punch boss!
+            
+            // Make components interactable
+            makeInteractable(head, boss);
+            makeInteractable(torso, boss);
+            makeInteractable(boss.userData.lArm, boss);
+            makeInteractable(boss.userData.rArm, boss);
 
-            // Waypoints around the room edges
+            // Waypoints around the wider room edges
             bossWaypoints = [
-                new THREE.Vector3(1.4, 0, 1.2),
-                new THREE.Vector3(-1.4, 0, 1.2),
-                new THREE.Vector3(-1.4, 0, -1.2),
-                new THREE.Vector3(1.4, 0, -1.2)
+                new THREE.Vector3(ROOM_X/2 - 0.8, 0, ROOM_Z/2 - 0.8),
+                new THREE.Vector3(-ROOM_X/2 + 0.8, 0, ROOM_Z/2 - 0.8),
+                new THREE.Vector3(-ROOM_X/2 + 0.8, 0, -ROOM_Z/2 + 0.8),
+                new THREE.Vector3(ROOM_X/2 - 0.8, 0, -ROOM_Z/2 + 0.8)
             ];
             boss.position.copy(bossWaypoints);
         }
@@ -426,32 +431,38 @@
 
             // 1. PINCH LOGIC (Grab / Throw)
             let pinchDist = thumb.distanceTo(indexTip);
-            let isPinchingNow = pinchDist < 0.03;
+            let isPinchingNow = pinchDist < 0.05; // Loosened pinch threshold
 
             if (isPinchingNow && !state.isPinching) {
-                // Just started pinching -> Try Grab
+                // Expanded grab radius so everything can be picked easily
                 let closest = findClosestInteractable(indexTip);
-                if (closest && closest.distance < 0.2) {
+                if (closest && closest.distance < 0.5) { 
                     state.grabbedObj = closest.mesh;
-                    // Remove from physics if exists
-                    dynamicObjects = dynamicObjects.filter(d => d.mesh !== state.grabbedObj);
+                    let objToMove = state.grabbedObj.userData.parentGroup || state.grabbedObj;
+                    
+                    // Prevent jarring snap by saving finger offset
+                    state.grabOffset.subVectors(objToMove.position, indexTip);
+                    
+                    // Suspend physical falling for entire target object
+                    dynamicObjects = dynamicObjects.filter(d => d.mesh !== objToMove);
                 }
             } else if (!isPinchingNow && state.isPinching && state.grabbedObj) {
-                // Released pinch -> Throw
+                // Thrown items
+                let objToMove = state.grabbedObj.userData.parentGroup || state.grabbedObj;
                 dynamicObjects.push({
-                    mesh: state.grabbedObj,
-                    velocity: state.velocity.clone().multiplyScalar(0.5), // Scale down velocity for realistic throw
+                    mesh: objToMove,
+                    velocity: state.velocity.clone().multiplyScalar(0.5),
                     angular: new THREE.Vector3(Math.random()-0.5, Math.random()-0.5, Math.random()-0.5).multiplyScalar(5)
                 });
                 state.grabbedObj = null;
             }
             state.isPinching = isPinchingNow;
 
-            // Update grabbed object position
+            // Follow grabbed offset accurately
             if (state.grabbedObj) {
                 let targetPos = indexTip.clone();
                 let objToMove = state.grabbedObj.userData.parentGroup || state.grabbedObj;
-                objToMove.position.copy(targetPos);
+                objToMove.position.copy(targetPos).add(state.grabOffset);
             }
 
             // 2. FIST LOGIC (Punch / Shatter)
@@ -459,19 +470,19 @@
             let d2 = middle.distanceTo(wrist);
             let d3 = ring.distanceTo(wrist);
             let d4 = pinky.distanceTo(wrist);
-            let isFistNow = (d1 < 0.1 && d2 < 0.1 && d3 < 0.1 && d4 < 0.1);
+            let isFistNow = (d1 < 0.12 && d2 < 0.12 && d3 < 0.12 && d4 < 0.12); // relaxed fist check
 
             state.cooldown -= dt;
 
-            if (isFistNow && state.velocity.length() > 2.0 && state.cooldown <= 0) {
-                // High velocity fist = Punch
+            // Lowered punch velocity threshold to make smashing easy
+            if (isFistNow && state.velocity.length() > 1.0 && state.cooldown <= 0) {
                 let closest = findClosestInteractable(wrist);
-                if (closest && closest.distance < 0.25) {
+                if (closest && closest.distance < 0.3) {
                     let obj = closest.mesh;
                     obj.userData.punchCount++;
-                    state.cooldown = 0.5; // Half second cooldown per hand
+                    state.cooldown = 0.5;
                     
-                    // Flash red
+                    // Flash red feedback
                     if(obj.material && obj.material.emissive) {
                         obj.material.emissive.setHex(0x550000);
                         setTimeout(() => { if(obj.material) obj.material.emissive.setHex(0x000000); }, 200);
@@ -489,7 +500,7 @@
             let closestDist = Infinity;
             let closestMesh = null;
             interactables.forEach(mesh => {
-                if(!mesh.parent) return; // Shattered
+                if(!mesh.parent) return; // Prevent checking shattered items
                 let wPos = new THREE.Vector3();
                 mesh.getWorldPosition(wPos);
                 let d = pos.distanceTo(wPos);
@@ -502,19 +513,18 @@
         }
 
         function shatterObject(mesh) {
-            // Remove from interaction
+            // Unlink from interactions
             interactables = interactables.filter(m => m !== mesh);
             
-            // Get World Position & Scale
             let wPos = new THREE.Vector3();
             mesh.getWorldPosition(wPos);
             let mat = mesh.userData.originalMat || new THREE.MeshStandardMaterial({color: 0x888888});
             
-            // Hide original
+            // Hide the original object completely
             mesh.visible = false;
             if(mesh.parent) mesh.parent.remove(mesh);
 
-            // Create 8 small shards
+            // Shard explosion effect
             const shardGeo = new THREE.BoxGeometry(0.1, 0.1, 0.1);
             for(let i=0; i<8; i++) {
                 let shard = new THREE.Mesh(shardGeo, mat);
@@ -535,30 +545,31 @@
             const wrist2 = getJointPos(hand2, 'wrist');
 
             if (wrist1 && wrist2) {
-                let dist = wrist1.distanceTo(wrist2);
-                
-                // If palms/wrists are together
-                if (dist < 0.25) {
-                    let midPoint = new THREE.Vector3().addVectors(wrist1, wrist2).multiplyScalar(0.5);
+                let camDir = new THREE.Vector3();
+                camera.getWorldDirection(camDir);
+
+                // Analyze wrist rotation to see if palm faces away (show backs of hands)
+                let w1 = hand1.joints && hand1.joints['wrist'];
+                let w2 = hand2.joints && hand2.joints['wrist'];
+
+                if (w1 && w2) {
+                    // WebXR typically assigns -Y axis as the direction coming out of the palm
+                    let palmNorm1 = new THREE.Vector3(0, -1, 0).applyQuaternion(w1.quaternion);
+                    let palmNorm2 = new THREE.Vector3(0, -1, 0).applyQuaternion(w2.quaternion);
+
+                    // If palms generally point horizontally along the camera's gaze axis
+                    let dot1 = Math.abs(palmNorm1.dot(camDir));
+                    let dot2 = Math.abs(palmNorm2.dot(camDir));
+
                     let headPos = new THREE.Vector3();
                     camera.getWorldPosition(headPos);
-                    
-                    let currDistToHead = midPoint.distanceTo(headPos);
-                    let prevDistToHead = prevMidPoint.distanceTo(headPos);
-                    
-                    // Moving hands away from body
-                    if (currDistToHead - prevDistToHead > 0.005) {
-                        let dir = new THREE.Vector3();
-                        camera.getWorldDirection(dir);
-                        dir.y = 0; dir.normalize();
-                        
-                        // User specified speed: 0.150. Applying per frame/dt for smooth continuous movement.
-                        playerGroup.position.add(dir.multiplyScalar(0.150 * 60 * dt)); // scaled to ~9m/s if intended as such, or just literal offset
+
+                    // If both hands are raised & user is showing back of palms (or front)
+                    if (dot1 > 0.4 && dot2 > 0.4 && wrist1.y > headPos.y - 0.5 && wrist2.y > headPos.y - 0.5) {
+                        let dir = new THREE.Vector3(camDir.x, 0, camDir.z).normalize();
+                        // Exactly 0.150 per frame movement forward as requested
+                        playerGroup.position.add(dir.multiplyScalar(0.150));
                     }
-                    prevMidPoint.copy(midPoint);
-                } else {
-                    // Reset midpoint tracking if hands break apart
-                    prevMidPoint.copy(new THREE.Vector3().addVectors(wrist1, wrist2).multiplyScalar(0.5));
                 }
             }
         }
@@ -567,11 +578,8 @@
             const GRAVITY = 9.8;
             for (let i = dynamicObjects.length - 1; i >= 0; i--) {
                 let obj = dynamicObjects[i];
-                let m = obj.mesh;
+                let target = obj.mesh;
                 
-                // If it's a parent group, move the group
-                let target = m.userData.parentGroup || m;
-
                 target.position.add(obj.velocity.clone().multiplyScalar(dt));
                 target.rotation.x += obj.angular.x * dt;
                 target.rotation.y += obj.angular.y * dt;
@@ -579,15 +587,13 @@
 
                 obj.velocity.y -= GRAVITY * dt;
 
-                // Floor collision
                 if (target.position.y < 0.1) {
                     target.position.y = 0.1;
                     obj.velocity.y *= -0.5; // Bounce
-                    obj.velocity.x *= 0.8; // Friction
+                    obj.velocity.x *= 0.8; // Ground Friction
                     obj.velocity.z *= 0.8;
                     
                     if (obj.velocity.length() < 0.1) {
-                        // Sleep
                         dynamicObjects.splice(i, 1);
                     }
                 }
@@ -595,7 +601,7 @@
         }
 
         function updateBoss(dt) {
-            if(!boss.visible) return; // He got shattered!
+            if(!boss.visible) return;
             
             let target = bossWaypoints[currentWaypointIndex];
             let dir = new THREE.Vector3().subVectors(target, boss.position);
@@ -606,13 +612,12 @@
                 currentWaypointIndex = (currentWaypointIndex + 1) % bossWaypoints.length;
             } else {
                 dir.normalize();
-                boss.position.add(dir.multiplyScalar(0.5 * dt)); // Speed 0.5 m/s
+                boss.position.add(dir.multiplyScalar(0.5 * dt));
                 
-                // Smooth lookAt
                 let lookTarget = boss.position.clone().add(dir);
                 boss.lookAt(lookTarget);
 
-                // Walking animation
+                // Exaggerated walking cycle
                 let time = clock.getElapsedTime();
                 boss.userData.lLeg.rotation.x = Math.sin(time * 5) * 0.5;
                 boss.userData.rLeg.rotation.x = Math.sin(time * 5 + Math.PI) * 0.5;
@@ -624,7 +629,6 @@
         function animate() {
             const dt = clock.getDelta();
             
-            // Sync player body to camera XZ
             let camWorld = new THREE.Vector3();
             camera.getWorldPosition(camWorld);
             playerBody.position.set(camera.position.x, 0.7, camera.position.z);
