@@ -81,7 +81,8 @@
             playerGroup = new THREE.Group();
             scene.add(playerGroup);
             playerGroup.add(camera);
-            playerGroup.position.set(0, 0, 0); // Start at center floor
+            // Start at the back of the room in the middle
+            playerGroup.position.set(0, 0, ROOM_Z / 2 - 1.0); 
 
             // Player Avatar Body
             const bodyGeo = new THREE.CylinderGeometry(0.2, 0.2, 1.4, 16);
@@ -567,8 +568,10 @@
                     // If both hands are raised & user is showing back of palms (or front)
                     if (dot1 > 0.4 && dot2 > 0.4 && wrist1.y > headPos.y - 0.5 && wrist2.y > headPos.y - 0.5) {
                         let dir = new THREE.Vector3(camDir.x, 0, camDir.z).normalize();
-                        // Exactly 0.150 per frame movement forward as requested
-                        playerGroup.position.add(dir.multiplyScalar(0.150));
+                        
+                        // Frame-rate independent speed logic properly scaled
+                        let speed = 0.150 * 10; 
+                        playerGroup.position.add(dir.multiplyScalar(speed * dt));
                     }
                 }
             }
@@ -638,6 +641,11 @@
             processHandLogic(hand2, 1, dt);
             updatePhysics(dt);
             updateBoss(dt);
+            
+            // Hard clamp player to the room so they can never be thrown out
+            const padding = 0.5;
+            playerGroup.position.x = Math.max(-ROOM_X/2 + padding, Math.min(ROOM_X/2 - padding, playerGroup.position.x));
+            playerGroup.position.z = Math.max(-ROOM_Z/2 + padding, Math.min(ROOM_Z/2 - padding, playerGroup.position.z));
 
             renderer.render(scene, camera);
         }
