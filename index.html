@@ -134,8 +134,9 @@
           this.positions.push({ pos: this.handPos.clone(), time: time });
           if (this.positions.length > 5) this.positions.shift();
           if (this.positions.length > 1) {
-            const oldest = this.positions;
-            const latest = this.positions[this.positions.length - 1];
+            // FIX: Using .at() to completely bypass the bracket-stripping bug
+            const oldest = this.positions.at(0); 
+            const latest = this.positions.at(-1);
             const dt = (latest.time - oldest.time) / 1000;
             if (dt > 0) this.velocity.subVectors(latest.pos, oldest.pos).multiplyScalar(1 / dt);
           }
@@ -143,11 +144,12 @@
 
         const mesh = this.el.getObject3D('mesh');
         if (mesh && mesh.skeleton) {
-          const wristMatrix = mesh.skeleton.bones.matrixWorld;
+          // FIX: Using .at(0) to securely grab the first bone without brackets
+          const wristMatrix = mesh.skeleton.bones.at(0).matrixWorld; 
           const wristPos = new THREE.Vector3().setFromMatrixPosition(wristMatrix);
           let maxDist = 0;
           for(let i = 1; i < mesh.skeleton.bones.length; i++) {
-            const bone = new THREE.Vector3().setFromMatrixPosition(mesh.skeleton.bones[i].matrixWorld);
+            const bone = new THREE.Vector3().setFromMatrixPosition(mesh.skeleton.bones.at(i).matrixWorld);
             maxDist = Math.max(maxDist, wristPos.distanceTo(bone));
           }
           
