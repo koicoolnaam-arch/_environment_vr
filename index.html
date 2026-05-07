@@ -445,9 +445,17 @@
             state.velocity.copy(currentPos).sub(state.prevPos).divideScalar(dt || 0.016);
             state.prevPos.copy(currentPos);
 
+            // DETERMINE FIST: Check if ALL fingers are curled tightly
+            let d1 = indexTip.distanceTo(wrist);
+            let d2 = middle.distanceTo(wrist);
+            let d3 = ring.distanceTo(wrist);
+            let d4 = pinky.distanceTo(wrist);
+            let isFistNow = (d1 < 0.12 && d2 < 0.12 && d3 < 0.12 && d4 < 0.12); // Must be a full fist
+
             // 1. PINCH LOGIC (Grab / Throw)
             let pinchDist = thumb.distanceTo(indexTip);
-            let isPinchingNow = pinchDist < 0.05; // Loosened pinch threshold
+            // CRITICAL FIX: Only register pinch if we are NOT currently making a fist
+            let isPinchingNow = (pinchDist < 0.05) && !isFistNow;
 
             if (isPinchingNow && !state.isPinching) {
                 // Expanded grab radius so everything can be picked easily
@@ -482,12 +490,6 @@
             }
 
             // 2. FIST LOGIC (Punch / Shatter)
-            let d1 = indexTip.distanceTo(wrist);
-            let d2 = middle.distanceTo(wrist);
-            let d3 = ring.distanceTo(wrist);
-            let d4 = pinky.distanceTo(wrist);
-            let isFistNow = (d1 < 0.12 && d2 < 0.12 && d3 < 0.12 && d4 < 0.12); // relaxed fist check
-
             state.cooldown -= dt;
 
             // Lowered punch velocity threshold to make smashing easy
@@ -540,9 +542,15 @@
             mesh.visible = false;
             if(mesh.parent) mesh.parent.remove(mesh);
 
-            // Shard effect - Stationary pieces that stay where they broke
-            const shardGeo = new THREE.BoxGeometry(0.1, 0.1, 0.1);
-            for(let i=0; i<8; i++) {
+            // Shard effect - Unpredictable pieces that fall to the ground
+            let numPieces = Math.floor(Math.random() * 5) + 6; // 6 to 10 pieces
+            for(let i=0; i<numPieces; i++) {
+                // Randomize shape and size explicitly
+                let w = Math.random() * 0.2 + 0.05;
+                let h = Math.random() * 0.2 + 0.05;
+                let d = Math.random() * 0.2 + 0.05;
+                const shardGeo = new THREE.BoxGeometry(w, h, d);
+                
                 let shard = new THREE.Mesh(shardGeo, mat);
                 shard.position.copy(wPos);
                 // Add a small spread to make it look shattered
@@ -551,7 +559,13 @@
                 shard.position.z += (Math.random() - 0.5) * 0.4;
                 shard.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
                 scene.add(shard);
-                // Intentionally NOT pushing to dynamicObjects to keep them perfectly stationary
+                
+                // CRITICAL FIX: Add to physics engine so they fall to the solid ground and stop
+                dynamicObjects.push({
+                    mesh: shard,
+                    velocity: new THREE.Vector3((Math.random()-0.5)*2, Math.random()*2, (Math.random()-0.5)*2),
+                    angular: new THREE.Vector3(Math.random()*10, Math.random()*10, Math.random()*10)
+                });
             }
         }
 
