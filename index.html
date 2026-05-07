@@ -60,7 +60,7 @@
         // Room Dimensions (meters) - EXPANDED SIZE
         const ROOM_X = 14.64; // Much wider
         const ROOM_Y = 4.88;  // Height unchanged
-        const ROOM_Z = 24.40; // Extremely deep to leave the back empty
+        const ROOM_Z = 15.00; // Reduced empty back space by ~60%
 
         init();
         setupOffice();
@@ -158,11 +158,10 @@
             const deskH = 0.75;
             const deskD = 0.6;
 
-            // Vastly increased spacing, heavily offset towards the "front" (negative Z)
-            // to leave the "back" (positive Z) completely empty
+            // Increased spacing, shifted to fit the reduced room
             const startX = -4.0;
             const stepX = 2.0;
-            const startZ = -8.0;
+            const startZ = -5.0; 
             const stepZ = 3.0;
 
             for (let i = 0; i < 5; i++) {
@@ -225,7 +224,7 @@
             ctx.fillRect(0,0,512,512); ctx.fillRect(512,512,512,512);
             const tex = new THREE.CanvasTexture(canvas);
             tex.wrapS = THREE.RepeatWrapping; tex.wrapT = THREE.RepeatWrapping;
-            tex.repeat.set(24, 40); // Adjusted tiling for the massive new room size
+            tex.repeat.set(24, 25); // Adjusted tiling for the reduced room size
             tex.magFilter = THREE.NearestFilter;
             return tex;
         }
