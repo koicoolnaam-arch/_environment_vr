@@ -45,6 +45,7 @@
         let controllerGrip1, controllerGrip2;
         let boss;
         let interactables = [];
+        let obstacles = []; // Objects that block player movement
         let dynamicObjects = []; // Physics objects
         let bossWaypoints = [];
         let currentWaypointIndex = 0;
@@ -179,6 +180,7 @@
             printer.position.set(ROOM_X/2 - 1.0, 0.2, -4);
             printer.castShadow = true; printer.receiveShadow = true;
             makeInteractable(printer);
+            makeObstacle(printer, 0.4);
             scene.add(printer);
 
             // 5. Filing Cabinets (Left Side, pushed further back)
@@ -189,6 +191,7 @@
                 cabinet.position.set(-ROOM_X/2 + 1.0, 0.455, -5.0 + k*1.0);
                 cabinet.castShadow = true; cabinet.receiveShadow = true;
                 makeInteractable(cabinet);
+                makeObstacle(cabinet, 0.4);
                 scene.add(cabinet);
             }
 
@@ -253,6 +256,7 @@
                 makeInteractable(leg, deskGroup);
             });
             scene.add(deskGroup);
+            makeObstacle(deskGroup, 0.6);
 
             // LAPTOP GROUP (Separate so it can be picked up individually)
             const lapGroup = new THREE.Group();
@@ -297,6 +301,7 @@
                 makeInteractable(l, chairGroup);
             });
             scene.add(chairGroup);
+            makeObstacle(chairGroup, 0.3);
         }
 
         function makeInteractable(mesh, parentGroup = null) {
@@ -307,6 +312,12 @@
             if (!interactables.includes(mesh)) {
                 interactables.push(mesh);
             }
+        }
+
+        function makeObstacle(group, radius) {
+            group.userData.isObstacle = true;
+            group.userData.radius = radius;
+            obstacles.push(group);
         }
 
         function setupBoss() {
@@ -361,6 +372,7 @@
             makeInteractable(torso, boss);
             makeInteractable(boss.userData.lArm, boss);
             makeInteractable(boss.userData.rArm, boss);
+            makeObstacle(boss, 0.4);
 
             // Updated Waypoints around the newly expanded perimeter
             bossWaypoints = [
@@ -528,19 +540,18 @@
             mesh.visible = false;
             if(mesh.parent) mesh.parent.remove(mesh);
 
-            // Shard explosion effect
+            // Shard effect - Stationary pieces that stay where they broke
             const shardGeo = new THREE.BoxGeometry(0.1, 0.1, 0.1);
             for(let i=0; i<8; i++) {
                 let shard = new THREE.Mesh(shardGeo, mat);
                 shard.position.copy(wPos);
-                shard.position.add(new THREE.Vector3(Math.random()*0.2-0.1, Math.random()*0.2-0.1, Math.random()*0.2-0.1));
+                // Add a small spread to make it look shattered
+                shard.position.x += (Math.random() - 0.5) * 0.4;
+                shard.position.y += (Math.random() - 0.5) * 0.4;
+                shard.position.z += (Math.random() - 0.5) * 0.4;
+                shard.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
                 scene.add(shard);
-                
-                dynamicObjects.push({
-                    mesh: shard,
-                    velocity: new THREE.Vector3((Math.random()-0.5)*3, Math.random()*3, (Math.random()-0.5)*3),
-                    angular: new THREE.Vector3(Math.random()*10, Math.random()*10, Math.random()*10)
-                });
+                // Intentionally NOT pushing to dynamicObjects to keep them perfectly stationary
             }
         }
 
@@ -574,7 +585,27 @@
                         
                         // Frame-rate independent speed logic properly scaled
                         let speed = 0.150 * 10; 
-                        playerGroup.position.add(dir.multiplyScalar(speed * dt));
+                        let proposedPos = playerGroup.position.clone().add(dir.multiplyScalar(speed * dt));
+                        
+                        // Collision Detection
+                        let canMove = true;
+                        const playerRadius = 0.4; 
+                        for(let obs of obstacles) {
+                            if(!obs.parent) continue; // Skip if object was shattered
+                            
+                            let dx = proposedPos.x - obs.position.x;
+                            let dz = proposedPos.z - obs.position.z;
+                            let dist = Math.sqrt(dx*dx + dz*dz);
+                            
+                            if (dist < obs.userData.radius + playerRadius) {
+                                canMove = false;
+                                break;
+                            }
+                        }
+
+                        if(canMove) {
+                            playerGroup.position.copy(proposedPos);
+                        }
                     }
                 }
             }
@@ -599,7 +630,11 @@
                     obj.velocity.x *= 0.8; // Ground Friction
                     obj.velocity.z *= 0.8;
                     
-                    if (obj.velocity.length() < 0.1) {
+                    // Crucial Fix: Dampen rotational angular momentum when hitting the floor
+                    obj.angular.multiplyScalar(0.8);
+                    
+                    // Remove from physics engine once it visually stops moving
+                    if (obj.velocity.length() < 0.1 && obj.angular.length() < 0.1) {
                         dynamicObjects.splice(i, 1);
                     }
                 }
@@ -645,7 +680,7 @@
             updatePhysics(dt);
             updateBoss(dt);
             
-            // Hard clamp player to the room so they can never be thrown out
+            // Hard clamp player to the room so they can never be thrown out (Solid walls)
             const padding = 0.5;
             playerGroup.position.x = Math.max(-ROOM_X/2 + padding, Math.min(ROOM_X/2 - padding, playerGroup.position.x));
             playerGroup.position.z = Math.max(-ROOM_Z/2 + padding, Math.min(ROOM_Z/2 - padding, playerGroup.position.z));
