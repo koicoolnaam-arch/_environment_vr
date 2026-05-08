@@ -69,7 +69,7 @@
         init();
         setupOffice();
         setupBossCubicle();
-        setupBoss();
+        setupBoss(); // THE BOSS IS SPAWNED HERE
         setupWebXR();
         renderer.setAnimationLoop(animate);
 
@@ -78,8 +78,8 @@
             document.body.appendChild(container);
 
             scene = new THREE.Scene();
-            // Dreary office lighting background
-            scene.background = new THREE.Color(0x1a1a1a);
+            // Dreary office lighting background with a blue tint
+            scene.background = new THREE.Color(0x151a22);
 
             camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 100);
             
@@ -112,11 +112,11 @@
         }
 
         function setupOffice() {
-            // 1. Lighting (Sterile, fluorescent feel)
-            const ambientLight = new THREE.AmbientLight(0xffffff, 0.7); // Slightly brighter ambient
+            // 1. Lighting (Sterile, fluorescent feel with heavy BLUE TINT)
+            const ambientLight = new THREE.AmbientLight(0xbbeeff, 0.8); // Blue tint ambient
             scene.add(ambientLight);
 
-            const dirLight = new THREE.DirectionalLight(0xe0e6ed, 1.0); // Slightly bluish-white
+            const dirLight = new THREE.DirectionalLight(0x99ccff, 1.2); // Blueish-white
             dirLight.position.set(2, ROOM_Y - 0.1, 2);
             dirLight.castShadow = true;
             dirLight.shadow.mapSize.width = 2048;
@@ -127,13 +127,13 @@
             dirLight.shadow.camera.right = 15;
             scene.add(dirLight);
 
-            const pLight1 = new THREE.PointLight(0xffffff, 0.2, 15); pLight1.position.set(5, 3.2, 5); scene.add(pLight1);
-            const pLight2 = new THREE.PointLight(0xffffff, 0.2, 15); pLight2.position.set(-5, 3.2, -5); scene.add(pLight2);
-            const pLight3 = new THREE.PointLight(0xffffff, 0.2, 15); pLight3.position.set(0, 3.2, 8); scene.add(pLight3); 
+            const pLight1 = new THREE.PointLight(0x88ccff, 0.4, 15); pLight1.position.set(5, 3.2, 5); scene.add(pLight1);
+            const pLight2 = new THREE.PointLight(0x88ccff, 0.4, 15); pLight2.position.set(-5, 3.2, -5); scene.add(pLight2);
+            const pLight3 = new THREE.PointLight(0x88ccff, 0.4, 15); pLight3.position.set(0, 3.2, 8); scene.add(pLight3); 
 
             // 2. Room Geometry (Walls, Floor, Ceiling)
             const floorGeo = new THREE.PlaneGeometry(ROOM_X, ROOM_Z);
-            const floorTex = createCarpetTexture(); // NEW carpet floor
+            const floorTex = createCarpetTexture(); // Carpet floor
             const floorMat = new THREE.MeshStandardMaterial({ map: floorTex, roughness: 0.9, metalness: 0.1 });
             const floor = new THREE.Mesh(floorGeo, floorMat);
             floor.rotation.x = -Math.PI / 2;
@@ -149,6 +149,9 @@
             createWall(ROOM_Z, ROOM_Y, ROOM_X/2, ROOM_Y/2, 0, -Math.PI/2, wallMat);
             createWall(ROOM_X, ROOM_Z, 0, ROOM_Y, 0, Math.PI/2, ceilingMat, true);
 
+            // 2.5 Add Tube Lights to Ceiling
+            setupTubeLights();
+
             // 3. Dense Cubicle Farm (Inspired by image)
             const cubicleWallMat = new THREE.MeshStandardMaterial({ color: 0xcccccc, roughness: 0.9 }); // Light gray partition
             const deskMat = new THREE.MeshStandardMaterial({ color: 0x9fa4a8, roughness: 0.7 }); // Gray desk top
@@ -162,7 +165,6 @@
             const deskD = 0.8;
             const partitionH = 1.4; // High walls
 
-            // WIDENED AISLES: Changed stepX to 2.0 and stepZ to 3.0 to prevent blocking the player
             const startX = -5.0;
             const stepX = 2.0; 
             const startZ = -5.5; 
@@ -234,25 +236,14 @@
 
             scene.add(clockGroup);
 
-            // 7. Poster Frame
-            const posterCanvas = document.createElement('canvas');
-            posterCanvas.width = 1024; posterCanvas.height = 512;
-            const pCtx = posterCanvas.getContext('2d');
+            // 7. Poster Frames on Both Walls
+            // Right Wall
+            createPosterFrame("WORST OFFICE EVER", ROOM_X/2 - 0.02, 3.2, -2.5, -Math.PI / 2);
+            createPosterFrame("HANG IN THERE", ROOM_X/2 - 0.02, 3.2, 2.5, -Math.PI / 2);
             
-            pCtx.fillStyle = 'white'; pCtx.fillRect(0, 0, 1024, 512);
-            pCtx.lineWidth = 40; pCtx.strokeStyle = '#111111'; // Black frame
-            pCtx.strokeRect(20, 20, 984, 472);
-            pCtx.fillStyle = 'black'; pCtx.font = 'bold 80px sans-serif'; pCtx.textAlign = 'center'; pCtx.textBaseline = 'middle';
-            pCtx.fillText("WORST OFFICE EVER", 512, 256);
-
-            const posterTex = new THREE.CanvasTexture(posterCanvas);
-            const posterGeo = new THREE.PlaneGeometry(2, 1);
-            const posterMat = new THREE.MeshBasicMaterial({ map: posterTex });
-            const poster = new THREE.Mesh(posterGeo, posterMat);
-            
-            poster.position.set(ROOM_X/2 - 0.02, 3.2, -2.5);
-            poster.rotation.y = -Math.PI / 2;
-            scene.add(poster);
+            // Left Wall
+            createPosterFrame("SYNERGY", -ROOM_X/2 + 0.02, 3.2, -2.5, Math.PI / 2);
+            createPosterFrame("TEAMWORK", -ROOM_X/2 + 0.02, 3.2, 2.5, Math.PI / 2);
 
             // 8. UI Text Panel
             const canvasUI = document.createElement('canvas');
@@ -266,6 +257,60 @@
             uiPlane.position.set(0, 3, ROOM_Z/2 - 0.05);
             uiPlane.rotation.y = Math.PI;
             scene.add(uiPlane);
+        }
+
+        // Setup fluorescent tube lights with blue tint
+        function setupTubeLights() {
+            const tubeGeo = new THREE.CylinderGeometry(0.05, 0.05, 2.4, 8);
+            // Emissive blue tint to make them glow
+            const tubeMat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0x99ccff, emissiveIntensity: 1.0 });
+            const fixtureGeo = new THREE.BoxGeometry(0.3, 0.1, 2.5);
+            const fixtureMat = new THREE.MeshStandardMaterial({ color: 0x888888 });
+
+            for(let x = -5; x <= 5; x += 5) {
+                for(let z = -5; z <= 5; z += 5) {
+                    const fixture = new THREE.Group();
+                    // Placed slightly below the ceiling
+                    fixture.position.set(x, ROOM_Y - 0.05, z);
+                    
+                    const base = new THREE.Mesh(fixtureGeo, fixtureMat);
+                    fixture.add(base);
+                    
+                    const tube1 = new THREE.Mesh(tubeGeo, tubeMat);
+                    tube1.rotation.x = Math.PI / 2;
+                    tube1.position.set(-0.08, -0.05, 0);
+                    fixture.add(tube1);
+
+                    const tube2 = new THREE.Mesh(tubeGeo, tubeMat);
+                    tube2.rotation.x = Math.PI / 2;
+                    tube2.position.set(0.08, -0.05, 0);
+                    fixture.add(tube2);
+
+                    scene.add(fixture);
+                }
+            }
+        }
+
+        // Helper function for making multiple frames
+        function createPosterFrame(text, x, y, z, rotY) {
+            const posterCanvas = document.createElement('canvas');
+            posterCanvas.width = 1024; posterCanvas.height = 512;
+            const pCtx = posterCanvas.getContext('2d');
+            
+            pCtx.fillStyle = 'white'; pCtx.fillRect(0, 0, 1024, 512);
+            pCtx.lineWidth = 40; pCtx.strokeStyle = '#111111'; // Black frame
+            pCtx.strokeRect(20, 20, 984, 472);
+            pCtx.fillStyle = 'black'; pCtx.font = 'bold 80px sans-serif'; pCtx.textAlign = 'center'; pCtx.textBaseline = 'middle';
+            pCtx.fillText(text, 512, 256);
+
+            const posterTex = new THREE.CanvasTexture(posterCanvas);
+            const posterGeo = new THREE.PlaneGeometry(2, 1);
+            const posterMat = new THREE.MeshBasicMaterial({ map: posterTex });
+            const poster = new THREE.Mesh(posterGeo, posterMat);
+            
+            poster.position.set(x, y, z);
+            poster.rotation.y = rotY;
+            scene.add(poster);
         }
 
         function createWall(w, h, x, y, z, rotY, mat, isCeiling=false) {
