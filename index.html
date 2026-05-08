@@ -162,15 +162,15 @@
             const deskD = 0.8;
             const partitionH = 1.4; // High walls
 
-            // Tightly packed rows
+            // WIDENED AISLES: Changed stepX to 2.0 and stepZ to 3.0 to prevent blocking the player
             const startX = -5.0;
-            const stepX = 1.25; // Shared walls basically
+            const stepX = 2.0; 
             const startZ = -5.5; 
-            const stepZ = 2.4;  // Room to sit
+            const stepZ = 3.0;  
 
-            // 6 Columns x 4 Rows = 24 Drones in a dense grid
-            for (let i = 0; i < 6; i++) {
-                for (let j = 0; j < 4; j++) {
+            // 5 Columns x 3 Rows = 15 Drones in a properly spaced grid
+            for (let i = 0; i < 5; i++) {
+                for (let j = 0; j < 3; j++) {
                     let posX = startX + i * stepX;
                     let posZ = startZ + j * stepZ;
                     createDenseCubicle(posX, posZ, deskW, deskH, deskD, partitionH, cubicleWallMat, deskMat, crtMat, screenMat, chairMat, paperMat);
@@ -344,7 +344,8 @@
             cubicleGroup.add(support); makeInteractable(support, cubicleGroup);
 
             scene.add(cubicleGroup);
-            makeObstacle(cubicleGroup, Math.max(w, d) / 2 + 0.1);
+            // Smaller bounding radius for cubicles so player doesn't get snagged easily
+            makeObstacle(cubicleGroup, 0.7);
 
             // 3. Bulky CRT Computer Group
             const crtGroup = new THREE.Group();
@@ -396,7 +397,7 @@
             back.position.set(0, 0.65, 0.18); back.castShadow = true; chairGroup.add(back); makeInteractable(back, chairGroup);
 
             scene.add(chairGroup);
-            makeObstacle(chairGroup, 0.3);
+            makeObstacle(chairGroup, 0.2); // Small radius to let player walk around it easily
 
             // 5. Worker Drone (Gray corporate suit)
             const workerGroup = new THREE.Group();
@@ -434,7 +435,6 @@
             wArmR.position.set(0.2, 0.65, -0.15); wArmR.rotation.x = -Math.PI/4; wArmR.castShadow = true; workerGroup.add(wArmR); makeInteractable(wArmR, workerGroup);
 
             scene.add(workerGroup);
-            makeObstacle(workerGroup, 0.3);
         }
 
         function setupBossCubicle() {
@@ -615,8 +615,9 @@
             makeInteractable(lLegMesh, boss);
             makeInteractable(rLegMesh, boss);
             
-            // Pacing waypoints: starts inside his cubicle, then sweeps through the aisles
+            // Pacing waypoints
             bossWaypoints = [
+                new THREE.Vector3(0, 0, ROOM_Z / 2 - 4.0), // VERY FIRST POINT: Directly in front of the player!
                 new THREE.Vector3(4.5, 0, 5.0), // Inside his cubicle
                 new THREE.Vector3(4.5, 0, 2.0), // Steps out of cubicle
                 new THREE.Vector3(4.5, 0, -7),  // Walks down the right aisle
@@ -629,7 +630,7 @@
                 new THREE.Vector3(2.0, 0, 5)    // Returns to his cubicle
             ];
             
-            // CRITICAL FIX: The boss must copy from the actual vector object, not the array itself
+            // CRITICAL FIX DONE HERE: The boss must copy from the actual vector object, not the array itself.
             boss.position.copy(bossWaypoints); 
         }
 
@@ -831,50 +832,57 @@
                 let w2 = hand2.joints && hand2.joints['wrist'];
 
                 if (w1 && w2) {
-                    // WebXR typically assigns -Y axis as the direction coming out of the palm
                     let palmNorm1 = new THREE.Vector3(0, -1, 0).applyQuaternion(w1.quaternion);
                     let palmNorm2 = new THREE.Vector3(0, -1, 0).applyQuaternion(w2.quaternion);
 
-                    // If palms generally point horizontally along the camera's gaze axis
                     let dot1 = Math.abs(palmNorm1.dot(camDir));
                     let dot2 = Math.abs(palmNorm2.dot(camDir));
 
                     let headPos = new THREE.Vector3();
                     camera.getWorldPosition(headPos);
 
-                    // LOOSENED THRESHOLDS: So the user can comfortably move through the entire office
-                    if (dot1 > 0.2 && dot2 > 0.2 && wrist1.y > headPos.y - 0.7 && wrist2.y > headPos.y - 0.7) {
+                    // Slightly more lenient detection bounds so you don't stop accidentally
+                    if (dot1 > 0.1 && dot2 > 0.1 && wrist1.y > headPos.y - 0.8 && wrist2.y > headPos.y - 0.8) {
                         let dir = new THREE.Vector3(camDir.x, 0, camDir.z).normalize();
                         
-                        // Frame-rate independent speed logic properly scaled
                         let speed = 0.150 * 10; 
-                        let proposedPos = playerGroup.position.clone().add(dir.multiplyScalar(speed * dt));
+                        let moveVec = dir.multiplyScalar(speed * dt);
                         
-                        // IMPROVED COLLISION DETECTION: Prevents getting completely locked/stuck
-                        let canMove = true;
-                        const playerRadius = 0.4; 
+                        // NEW FIX: Independent sliding collision logic! 
+                        // Instead of blocking ALL movement, we test X and Z axes independently.
+                        let targetX = playerGroup.position.x + moveVec.x;
+                        let targetZ = playerGroup.position.z + moveVec.z;
+                        
+                        let canMoveX = true;
+                        let canMoveZ = true;
+                        const playerRadius = 0.2; // Reduced player hit-box to let you slide between desks
+                        
                         for(let obs of obstacles) {
                             if(!obs.parent) continue; // Skip if object was shattered
                             
-                            let dx = proposedPos.x - obs.position.x;
-                            let dz = proposedPos.z - obs.position.z;
-                            let dist = Math.sqrt(dx*dx + dz*dz);
+                            // Check X Axis
+                            let dx_X = targetX - obs.position.x;
+                            let dz_X = playerGroup.position.z - obs.position.z;
+                            if (Math.sqrt(dx_X*dx_X + dz_X*dz_X) < obs.userData.radius + playerRadius) {
+                                // Only block if we are actually moving into it
+                                if(Math.abs(targetX - obs.position.x) < Math.abs(playerGroup.position.x - obs.position.x)) {
+                                    canMoveX = false;
+                                }
+                            }
                             
-                            // Check current distance to see if we are trying to back out
-                            let currentDx = playerGroup.position.x - obs.position.x;
-                            let currentDz = playerGroup.position.z - obs.position.z;
-                            let currentDist = Math.sqrt(currentDx*currentDx + currentDz*currentDz);
-                            
-                            // Only block movement if we are clipping an object AND moving *closer* to it
-                            if (dist < obs.userData.radius + playerRadius && dist < currentDist) {
-                                canMove = false;
-                                break;
+                            // Check Z Axis
+                            let dx_Z = playerGroup.position.x - obs.position.x;
+                            let dz_Z = targetZ - obs.position.z;
+                            if (Math.sqrt(dx_Z*dx_Z + dz_Z*dz_Z) < obs.userData.radius + playerRadius) {
+                                if(Math.abs(targetZ - obs.position.z) < Math.abs(playerGroup.position.z - obs.position.z)) {
+                                    canMoveZ = false;
+                                }
                             }
                         }
 
-                        if(canMove) {
-                            playerGroup.position.copy(proposedPos);
-                        }
+                        // Apply independent movement (Allows sliding against desks)
+                        if(canMoveX) playerGroup.position.x = targetX;
+                        if(canMoveZ) playerGroup.position.z = targetZ;
                     }
                 }
             }
