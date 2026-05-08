@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Immersive WebXR Office - Quest 3S</title>
+    <!-- Import Hind Regular Font -->
+    <link href="https://fonts.googleapis.com/css2?family=Hind:wght@400&display=swap" rel="stylesheet">
     <style>
         body { margin: 0; overflow: hidden; background-color: #000; font-family: sans-serif; }
         #info {
@@ -59,13 +61,14 @@
 
         const clock = new THREE.Clock();
 
-        // Room Dimensions (meters) - EXPANDED SIZE
-        const ROOM_X = 14.64; // Much wider
-        const ROOM_Y = 4.88;  // Height unchanged
-        const ROOM_Z = 15.00; // Reduced empty back space by ~60%
+        // Room Dimensions (meters)
+        const ROOM_X = 14.64; // Wide
+        const ROOM_Y = 4.88;  // Height
+        const ROOM_Z = 15.00; // Deep
 
         init();
         setupOffice();
+        setupBossCubicle();
         setupBoss();
         setupWebXR();
         renderer.setAnimationLoop(animate);
@@ -75,7 +78,8 @@
             document.body.appendChild(container);
 
             scene = new THREE.Scene();
-            scene.background = new THREE.Color(0x222222);
+            // Dreary office lighting background
+            scene.background = new THREE.Color(0x1a1a1a);
 
             camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 100);
             
@@ -83,7 +87,7 @@
             playerGroup = new THREE.Group();
             scene.add(playerGroup);
             playerGroup.add(camera);
-            // Start at the back of the newly expanded room in the middle
+            // Start at the back of the room in the middle
             playerGroup.position.set(0, 0, ROOM_Z / 2 - 2.0); 
 
             // Player Avatar Body
@@ -108,100 +112,98 @@
         }
 
         function setupOffice() {
-            // 1. Lighting
-            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+            // 1. Lighting (Sterile, fluorescent feel)
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.7); // Slightly brighter ambient
             scene.add(ambientLight);
 
-            const dirLight = new THREE.DirectionalLight(0xffffff, 1.0);
-            dirLight.position.set(0, ROOM_Y - 0.1, 0);
+            const dirLight = new THREE.DirectionalLight(0xe0e6ed, 1.0); // Slightly bluish-white
+            dirLight.position.set(2, ROOM_Y - 0.1, 2);
             dirLight.castShadow = true;
             dirLight.shadow.mapSize.width = 2048;
             dirLight.shadow.mapSize.height = 2048;
-            // Expand shadow camera size to cover the huge room
             dirLight.shadow.camera.top = 15;
             dirLight.shadow.camera.bottom = -15;
             dirLight.shadow.camera.left = -15;
             dirLight.shadow.camera.right = 15;
             scene.add(dirLight);
 
-            // Point lights spaced out to fill the larger room
-            const pLight1 = new THREE.PointLight(0xffffff, 0.3, 15); pLight1.position.set(5, 3.2, 5); scene.add(pLight1);
-            const pLight2 = new THREE.PointLight(0xffffff, 0.3, 15); pLight2.position.set(-5, 3.2, -5); scene.add(pLight2);
-            const pLight3 = new THREE.PointLight(0xffffff, 0.3, 15); pLight3.position.set(0, 3.2, 8); scene.add(pLight3); // Backlight
+            const pLight1 = new THREE.PointLight(0xffffff, 0.2, 15); pLight1.position.set(5, 3.2, 5); scene.add(pLight1);
+            const pLight2 = new THREE.PointLight(0xffffff, 0.2, 15); pLight2.position.set(-5, 3.2, -5); scene.add(pLight2);
+            const pLight3 = new THREE.PointLight(0xffffff, 0.2, 15); pLight3.position.set(0, 3.2, 8); scene.add(pLight3); 
 
             // 2. Room Geometry (Walls, Floor, Ceiling)
             const floorGeo = new THREE.PlaneGeometry(ROOM_X, ROOM_Z);
-            const floorTex = createCheckerboardTexture();
-            const floorMat = new THREE.MeshStandardMaterial({ map: floorTex, roughness: 0.8 });
+            const floorTex = createCarpetTexture(); // NEW carpet floor
+            const floorMat = new THREE.MeshStandardMaterial({ map: floorTex, roughness: 0.9, metalness: 0.1 });
             const floor = new THREE.Mesh(floorGeo, floorMat);
             floor.rotation.x = -Math.PI / 2;
             floor.receiveShadow = true;
             scene.add(floor);
 
-            const wallMat = new THREE.MeshStandardMaterial({ color: 0xA9A9A9, roughness: 0.9 });
-            const ceilingMat = new THREE.MeshStandardMaterial({ color: 0xFFFFFF, roughness: 0.9 });
+            const wallMat = new THREE.MeshStandardMaterial({ color: 0xd0d4d9, roughness: 0.9 }); // Dull gray walls
+            const ceilingMat = new THREE.MeshStandardMaterial({ color: 0xeeeeee, roughness: 0.9 });
 
-            // Back Wall
             createWall(ROOM_X, ROOM_Y, 0, ROOM_Y/2, -ROOM_Z/2, 0, wallMat);
-            // Front Wall
             createWall(ROOM_X, ROOM_Y, 0, ROOM_Y/2, ROOM_Z/2, Math.PI, wallMat);
-            // Left Wall
             createWall(ROOM_Z, ROOM_Y, -ROOM_X/2, ROOM_Y/2, 0, Math.PI/2, wallMat);
-            // Right Wall
             createWall(ROOM_Z, ROOM_Y, ROOM_X/2, ROOM_Y/2, 0, -Math.PI/2, wallMat);
-            // Ceiling
             createWall(ROOM_X, ROOM_Z, 0, ROOM_Y, 0, Math.PI/2, ceilingMat, true);
 
-            // 3. Furniture (15 Desks, Laptops, Chairs)
-            const deskWoodMat = new THREE.MeshStandardMaterial({ color: 0x4A2C1A, roughness: 0.4, metalness: 0.1 });
-            const laptopMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.5 });
+            // 3. Dense Cubicle Farm (Inspired by image)
+            const cubicleWallMat = new THREE.MeshStandardMaterial({ color: 0xcccccc, roughness: 0.9 }); // Light gray partition
+            const deskMat = new THREE.MeshStandardMaterial({ color: 0x9fa4a8, roughness: 0.7 }); // Gray desk top
+            const crtMat = new THREE.MeshStandardMaterial({ color: 0xddddcc, roughness: 0.8 }); // Old beige plastic
+            const screenMat = new THREE.MeshStandardMaterial({ color: 0x2b302c, roughness: 0.2 }); // Dark screen
+            const chairMat = new THREE.MeshStandardMaterial({ color: 0x222233, roughness: 0.6 }); // Dark blue/black fabric chair
+            const paperMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1.0 }); // Paper
             
-            const deskW = 1.0; 
+            const deskW = 1.2; 
             const deskH = 0.75;
-            const deskD = 0.6;
+            const deskD = 0.8;
+            const partitionH = 1.4; // High walls
 
-            // Increased spacing, shifted to fit the reduced room
-            const startX = -4.0;
-            const stepX = 2.0;
-            const startZ = -5.0; 
-            const stepZ = 3.0;
+            // Tightly packed rows
+            const startX = -5.0;
+            const stepX = 1.25; // Shared walls basically
+            const startZ = -5.5; 
+            const stepZ = 2.4;  // Room to sit
 
-            for (let i = 0; i < 5; i++) {
-                for (let j = 0; j < 3; j++) {
+            // 6 Columns x 4 Rows = 24 Drones in a dense grid
+            for (let i = 0; i < 6; i++) {
+                for (let j = 0; j < 4; j++) {
                     let posX = startX + i * stepX;
                     let posZ = startZ + j * stepZ;
-                    createDeskUnit(posX, posZ, deskW, deskH, deskD, deskWoodMat, laptopMat);
+                    createDenseCubicle(posX, posZ, deskW, deskH, deskD, partitionH, cubicleWallMat, deskMat, crtMat, screenMat, chairMat, paperMat);
                 }
             }
 
-            // 4. Printer (Right Side, pushed further back)
-            const printerGeo = new THREE.BoxGeometry(0.5, 0.4, 0.5);
+            // 4. Photocopier/Printer
+            const printerGeo = new THREE.BoxGeometry(0.8, 1.0, 0.6);
             const printerMat = new THREE.MeshStandardMaterial({ color: 0xdddddd });
             const printer = new THREE.Mesh(printerGeo, printerMat);
-            printer.position.set(ROOM_X/2 - 1.0, 0.2, -4);
+            printer.position.set(ROOM_X/2 - 1.2, 0.5, -4);
             printer.castShadow = true; printer.receiveShadow = true;
             makeInteractable(printer);
-            makeObstacle(printer, 0.4);
+            makeObstacle(printer, 0.6);
             scene.add(printer);
 
-            // 5. Filing Cabinets (Left Side, pushed further back)
-            const cabGeo = new THREE.BoxGeometry(0.46, 0.91, 0.46);
-            const cabMat = new THREE.MeshStandardMaterial({ color: 0x4F4F4F, metalness: 0.6, roughness: 0.4 });
-            for(let k=0; k<2; k++) {
+            // 5. Filing Cabinets 
+            const cabGeo = new THREE.BoxGeometry(0.46, 1.3, 0.6);
+            const cabMat = new THREE.MeshStandardMaterial({ color: 0x555555, metalness: 0.3, roughness: 0.7 });
+            for(let k=0; k<3; k++) {
                 const cabinet = new THREE.Mesh(cabGeo, cabMat);
-                cabinet.position.set(-ROOM_X/2 + 1.0, 0.455, -5.0 + k*1.0);
+                cabinet.position.set(-ROOM_X/2 + 0.6, 0.65, -5.0 + k*0.8);
                 cabinet.castShadow = true; cabinet.receiveShadow = true;
                 makeInteractable(cabinet);
                 makeObstacle(cabinet, 0.4);
                 scene.add(cabinet);
             }
 
-            // 6. Working Wall Clock (Right Wall)
+            // 6. Working Wall Clock
             const clockGroup = new THREE.Group();
-            clockGroup.position.set(ROOM_X/2 - 0.05, 3.2, 0); // High up on the right wall
-            clockGroup.rotation.y = -Math.PI / 2; // Face inwards
+            clockGroup.position.set(ROOM_X/2 - 0.05, 3.2, 0);
+            clockGroup.rotation.y = -Math.PI / 2;
 
-            // Clock Face
             const faceGeo = new THREE.CylinderGeometry(0.4, 0.4, 0.05, 32);
             const faceMat = new THREE.MeshStandardMaterial({ color: 0xffffff });
             const face = new THREE.Mesh(faceGeo, faceMat);
@@ -209,60 +211,38 @@
             face.castShadow = true;
             clockGroup.add(face);
 
-            // Clock Rim
             const rimGeo = new THREE.TorusGeometry(0.4, 0.04, 16, 32);
             const rimMat = new THREE.MeshStandardMaterial({ color: 0x111111 });
             const rim = new THREE.Mesh(rimGeo, rimMat);
             rim.castShadow = true;
             clockGroup.add(rim);
 
-            // Hands Pivots
             const handMatBlack = new THREE.MeshBasicMaterial({ color: 0x000000 });
             const handMatRed = new THREE.MeshBasicMaterial({ color: 0xaa0000 });
 
             hourHand = new THREE.Group();
             const hMesh = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.25, 0.02), handMatBlack);
-            hMesh.position.y = 0.125;
-            hMesh.position.z = 0.03;
-            hourHand.add(hMesh);
-            clockGroup.add(hourHand);
+            hMesh.position.y = 0.125; hMesh.position.z = 0.03; hourHand.add(hMesh); clockGroup.add(hourHand);
 
             minuteHand = new THREE.Group();
             const mMesh = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.35, 0.02), handMatBlack);
-            mMesh.position.y = 0.175;
-            mMesh.position.z = 0.04;
-            minuteHand.add(mMesh);
-            clockGroup.add(minuteHand);
+            mMesh.position.y = 0.175; mMesh.position.z = 0.04; minuteHand.add(mMesh); clockGroup.add(minuteHand);
 
             secondHand = new THREE.Group();
             const sMesh = new THREE.Mesh(new THREE.BoxGeometry(0.01, 0.35, 0.02), handMatRed);
-            sMesh.position.y = 0.175;
-            sMesh.position.z = 0.05;
-            secondHand.add(sMesh);
-            clockGroup.add(secondHand);
+            sMesh.position.y = 0.175; sMesh.position.z = 0.05; secondHand.add(sMesh); clockGroup.add(secondHand);
 
             scene.add(clockGroup);
 
-            // 7. Poster Frame (Right Wall)
+            // 7. Poster Frame
             const posterCanvas = document.createElement('canvas');
-            posterCanvas.width = 1024;
-            posterCanvas.height = 512;
+            posterCanvas.width = 1024; posterCanvas.height = 512;
             const pCtx = posterCanvas.getContext('2d');
             
-            // Poster Background
-            pCtx.fillStyle = 'white';
-            pCtx.fillRect(0, 0, 1024, 512);
-            
-            // Poster Frame Border
-            pCtx.lineWidth = 40;
-            pCtx.strokeStyle = '#4A2C1A'; // Wood frame color
+            pCtx.fillStyle = 'white'; pCtx.fillRect(0, 0, 1024, 512);
+            pCtx.lineWidth = 40; pCtx.strokeStyle = '#111111'; // Black frame
             pCtx.strokeRect(20, 20, 984, 472);
-            
-            // Poster Text
-            pCtx.fillStyle = 'black';
-            pCtx.font = 'bold 80px sans-serif';
-            pCtx.textAlign = 'center';
-            pCtx.textBaseline = 'middle';
+            pCtx.fillStyle = 'black'; pCtx.font = 'bold 80px sans-serif'; pCtx.textAlign = 'center'; pCtx.textBaseline = 'middle';
             pCtx.fillText("WORST OFFICE EVER", 512, 256);
 
             const posterTex = new THREE.CanvasTexture(posterCanvas);
@@ -270,8 +250,8 @@
             const posterMat = new THREE.MeshBasicMaterial({ map: posterTex });
             const poster = new THREE.Mesh(posterGeo, posterMat);
             
-            poster.position.set(ROOM_X/2 - 0.02, 3.2, -2.5); // Next to the clock on the right wall
-            poster.rotation.y = -Math.PI / 2; // Face inwards
+            poster.position.set(ROOM_X/2 - 0.02, 3.2, -2.5);
+            poster.rotation.y = -Math.PI / 2;
             scene.add(poster);
 
             // 8. UI Text Panel
@@ -284,7 +264,7 @@
             const texUI = new THREE.CanvasTexture(canvasUI);
             const uiPlane = new THREE.Mesh(new THREE.PlaneGeometry(3, 0.75), new THREE.MeshBasicMaterial({map: texUI}));
             uiPlane.position.set(0, 3, ROOM_Z/2 - 0.05);
-            uiPlane.rotation.y = Math.PI; // Face the player at spawn
+            uiPlane.rotation.y = Math.PI;
             scene.add(uiPlane);
         }
 
@@ -297,97 +277,246 @@
             scene.add(mesh);
         }
 
-        function createCheckerboardTexture() {
+        // Generate a noisy blue carpet texture
+        function createCarpetTexture() {
             const canvas = document.createElement('canvas');
-            canvas.width = 1024; canvas.height = 1024;
+            canvas.width = 512; canvas.height = 512;
             const ctx = canvas.getContext('2d');
-            ctx.fillStyle = 'white'; ctx.fillRect(0,0,1024,1024);
-            ctx.fillStyle = 'black';
-            ctx.fillRect(0,0,512,512); ctx.fillRect(512,512,512,512);
+            ctx.fillStyle = '#2A3C4D'; // Base blue-gray
+            ctx.fillRect(0,0,512,512);
+            
+            // Add noise for carpet effect
+            for(let i=0; i<40000; i++) {
+                ctx.fillStyle = Math.random() > 0.5 ? '#1F2D3D' : '#354A5F';
+                ctx.fillRect(Math.random()*512, Math.random()*512, 2, 2);
+            }
+            
             const tex = new THREE.CanvasTexture(canvas);
             tex.wrapS = THREE.RepeatWrapping; tex.wrapT = THREE.RepeatWrapping;
-            tex.repeat.set(24, 25); // Adjusted tiling for the reduced room size
-            tex.magFilter = THREE.NearestFilter;
+            tex.repeat.set(15, 15);
+            tex.magFilter = THREE.LinearFilter;
             return tex;
         }
 
-        function createDeskUnit(x, z, w, h, d, woodMat, lapMat) {
-            // DESK GROUP
-            const deskGroup = new THREE.Group();
-            deskGroup.position.set(x, 0, z);
+        function createDenseCubicle(x, z, w, h, d, wallH, wallMat, deskMat, crtMat, screenMat, chairMat, paperMat) {
+            const cubicleGroup = new THREE.Group();
+            cubicleGroup.position.set(x, 0, z);
 
-            const top = new THREE.Mesh(new THREE.BoxGeometry(w, 0.05, d), woodMat);
+            // 1. Partition Walls (Front, Left, Right)
+            const t = 0.05; // wall thickness
+            
+            // Front Partition
+            const frontWall = new THREE.Mesh(new THREE.BoxGeometry(w + t, wallH, t), wallMat);
+            frontWall.position.set(0, wallH/2, -d/2);
+            frontWall.castShadow = true; frontWall.receiveShadow = true;
+            cubicleGroup.add(frontWall); makeInteractable(frontWall, cubicleGroup);
+
+            // Left Partition
+            const leftWall = new THREE.Mesh(new THREE.BoxGeometry(t, wallH, d + t), wallMat);
+            leftWall.position.set(-w/2, wallH/2, 0);
+            leftWall.castShadow = true; leftWall.receiveShadow = true;
+            cubicleGroup.add(leftWall); makeInteractable(leftWall, cubicleGroup);
+
+            // Right Partition
+            const rightWall = new THREE.Mesh(new THREE.BoxGeometry(t, wallH, d + t), wallMat);
+            rightWall.position.set(w/2, wallH/2, 0);
+            rightWall.castShadow = true; rightWall.receiveShadow = true;
+            cubicleGroup.add(rightWall); makeInteractable(rightWall, cubicleGroup);
+
+            // Paper notes on partition walls
+            for(let p=0; p<3; p++) {
+                if(Math.random() > 0.3) {
+                    const paper = new THREE.Mesh(new THREE.PlaneGeometry(0.2, 0.28), paperMat);
+                    paper.position.set((Math.random() - 0.5) * 0.6, wallH - 0.3 - Math.random()*0.2, -d/2 + t/2 + 0.001);
+                    cubicleGroup.add(paper);
+                }
+            }
+
+            // 2. Desk Top & Support
+            const top = new THREE.Mesh(new THREE.BoxGeometry(w, t, d), deskMat);
             top.position.y = h;
             top.castShadow = true; top.receiveShadow = true;
-            deskGroup.add(top);
-            makeInteractable(top, deskGroup);
-            
-            const legGeo = new THREE.BoxGeometry(0.05, h, 0.05);
-            const positions = [
-                [-w/2+0.05, h/2, -d/2+0.05], [w/2-0.05, h/2, -d/2+0.05],
-                [-w/2+0.05, h/2, d/2-0.05], [w/2-0.05, h/2, d/2-0.05]
-            ];
-            positions.forEach(p => {
-                const leg = new THREE.Mesh(legGeo, woodMat);
-                leg.position.set(...p);
-                leg.castShadow = true; leg.receiveShadow = true;
-                deskGroup.add(leg);
-                makeInteractable(leg, deskGroup);
-            });
-            scene.add(deskGroup);
-            makeObstacle(deskGroup, 0.6);
+            cubicleGroup.add(top); makeInteractable(top, cubicleGroup);
 
-            // LAPTOP GROUP (Separate so it can be picked up individually)
-            const lapGroup = new THREE.Group();
-            lapGroup.position.set(x, h + 0.01, z);
+            const support = new THREE.Mesh(new THREE.BoxGeometry(w-0.1, h, 0.05), deskMat);
+            support.position.set(0, h/2, -d/2 + 0.1);
+            support.castShadow = true; support.receiveShadow = true;
+            cubicleGroup.add(support); makeInteractable(support, cubicleGroup);
 
-            const lapBase = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.02, 0.2), lapMat);
-            lapBase.castShadow = true;
-            lapGroup.add(lapBase);
-            makeInteractable(lapBase, lapGroup);
+            scene.add(cubicleGroup);
+            makeObstacle(cubicleGroup, Math.max(w, d) / 2 + 0.1);
 
-            const lapScreen = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.2, 0.02), lapMat);
-            lapScreen.position.set(0, 0.1, -0.09);
-            lapScreen.rotation.x = -0.1;
-            lapScreen.castShadow = true;
-            lapGroup.add(lapScreen);
-            makeInteractable(lapScreen, lapGroup);
-            scene.add(lapGroup);
+            // 3. Bulky CRT Computer Group
+            const crtGroup = new THREE.Group();
+            crtGroup.position.set(x, h + t/2, z - 0.1);
 
-            // CHAIR GROUP (Separate to pull chair out dynamically)
+            // Monitor Base
+            const mBase = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.08, 0.25), crtMat);
+            mBase.position.y = 0.04; mBase.castShadow = true;
+            crtGroup.add(mBase); makeInteractable(mBase, crtGroup);
+
+            // CRT Body
+            const crtBodyGeo = new THREE.BoxGeometry(0.4, 0.35, 0.4);
+            const crtBody = new THREE.Mesh(crtBodyGeo, crtMat);
+            crtBody.position.set(0, 0.25, 0); crtBody.castShadow = true;
+            crtGroup.add(crtBody); makeInteractable(crtBody, crtGroup);
+
+            // CRT Screen
+            const screen = new THREE.Mesh(new THREE.PlaneGeometry(0.32, 0.26), screenMat);
+            screen.position.set(0, 0.25, 0.201); // Slightly pushed out from body
+            crtGroup.add(screen); makeInteractable(screen, crtGroup);
+
+            // Bulky Keyboard
+            const keyboard = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.03, 0.15), crtMat);
+            keyboard.position.set(0, 0.015, 0.35); keyboard.castShadow = true;
+            crtGroup.add(keyboard); makeInteractable(keyboard, crtGroup);
+
+            // Mouse
+            const mouse = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.02, 0.08), crtMat);
+            mouse.position.set(0.3, 0.01, 0.35); mouse.castShadow = true;
+            crtGroup.add(mouse); makeInteractable(mouse, crtGroup);
+
+            scene.add(crtGroup);
+
+            // 4. Fabric Office Chair
+            const chairZ = z + d/2 + 0.2;
             const chairGroup = new THREE.Group();
-            chairGroup.position.set(x, 0, z + d/2 + 0.4); // slightly more pushed back
+            chairGroup.position.set(x, 0, chairZ);
             
-            const seat = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.05, 0.4), woodMat);
-            seat.position.y = 0.4; seat.castShadow = true; seat.receiveShadow = true;
-            chairGroup.add(seat);
-            makeInteractable(seat, chairGroup);
+            // Seat Base Hub
+            const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.35), new THREE.MeshStandardMaterial({color: 0x111111}));
+            hub.position.y = 0.175; chairGroup.add(hub); makeInteractable(hub, chairGroup);
+            
+            // Cushion
+            const seat = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.08, 0.45), chairMat);
+            seat.position.y = 0.39; seat.castShadow = true; seat.receiveShadow = true; chairGroup.add(seat); makeInteractable(seat, chairGroup);
 
-            const back = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.4, 0.05), woodMat);
-            back.position.set(0, 0.6, 0.18); back.castShadow = true;
-            chairGroup.add(back);
-            makeInteractable(back, chairGroup);
+            // Backrest
+            const back = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.45, 0.08), chairMat);
+            back.position.set(0, 0.65, 0.18); back.castShadow = true; chairGroup.add(back); makeInteractable(back, chairGroup);
 
-            const chairLeg = new THREE.BoxGeometry(0.04, 0.4, 0.04);
-            const clPos = [
-                [-0.18, 0.2, -0.18], [0.18, 0.2, -0.18],
-                [-0.18, 0.2, 0.18], [0.18, 0.2, 0.18]
-            ];
-            clPos.forEach(p => {
-                const l = new THREE.Mesh(chairLeg, woodMat);
-                l.position.set(...p); l.castShadow = true;
-                chairGroup.add(l);
-                makeInteractable(l, chairGroup);
-            });
             scene.add(chairGroup);
             makeObstacle(chairGroup, 0.3);
+
+            // 5. Worker Drone (Gray corporate suit)
+            const workerGroup = new THREE.Group();
+            workerGroup.position.set(x, 0, chairZ);
+            
+            const wSkinMat = new THREE.MeshStandardMaterial({ color: 0xffccaa });
+            const wSuitMat = new THREE.MeshStandardMaterial({ color: 0x777777 }); 
+            const wHairMat = new THREE.MeshStandardMaterial({ color: 0x222222 });
+
+            const wTorso = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.45, 0.2), wSuitMat);
+            wTorso.position.set(0, 0.65, 0); wTorso.castShadow = true; workerGroup.add(wTorso); makeInteractable(wTorso, workerGroup);
+            
+            const wHead = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.2, 0.18), wSkinMat);
+            wHead.position.set(0, 1.0, 0); wHead.castShadow = true; workerGroup.add(wHead); makeInteractable(wHead, workerGroup);
+
+            const wHair = new THREE.Mesh(new THREE.BoxGeometry(0.19, 0.05, 0.19), wHairMat);
+            wHair.position.set(0, 1.1, 0); workerGroup.add(wHair); makeInteractable(wHair, workerGroup);
+
+            // Legs
+            const wLegUpL = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 0.35), wSuitMat);
+            wLegUpL.position.set(-0.08, 0.48, -0.1); wLegUpL.castShadow = true; workerGroup.add(wLegUpL); makeInteractable(wLegUpL, workerGroup);
+            const wLegUpR = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 0.35), wSuitMat);
+            wLegUpR.position.set(0.08, 0.48, -0.1); wLegUpR.castShadow = true; workerGroup.add(wLegUpR); makeInteractable(wLegUpR, workerGroup);
+
+            const wLegDownL = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.4, 0.12), wSuitMat);
+            wLegDownL.position.set(-0.08, 0.2, -0.21); wLegDownL.castShadow = true; workerGroup.add(wLegDownL); makeInteractable(wLegDownL, workerGroup);
+            const wLegDownR = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.4, 0.12), wSuitMat);
+            wLegDownR.position.set(0.08, 0.2, -0.21); wLegDownR.castShadow = true; workerGroup.add(wLegDownR); makeInteractable(wLegDownR, workerGroup);
+
+            // Arms reaching to keyboard
+            const wArmL = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.4, 0.1), wSuitMat);
+            wArmL.position.set(-0.2, 0.65, -0.15); wArmL.rotation.x = -Math.PI/4; wArmL.castShadow = true; workerGroup.add(wArmL); makeInteractable(wArmL, workerGroup);
+
+            const wArmR = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.4, 0.1), wSuitMat);
+            wArmR.position.set(0.2, 0.65, -0.15); wArmR.rotation.x = -Math.PI/4; wArmR.castShadow = true; workerGroup.add(wArmR); makeInteractable(wArmR, workerGroup);
+
+            scene.add(workerGroup);
+            makeObstacle(workerGroup, 0.3);
+        }
+
+        function setupBossCubicle() {
+            // Boss Cubicle positioned at X: 5.0, Z: 5.0 (Front-Right area of the empty back space)
+            const cubicleGroup = new THREE.Group();
+            cubicleGroup.position.set(4.5, 0, 4.0);
+            
+            const wallMat = new THREE.MeshStandardMaterial({ color: 0x445566, roughness: 0.8 }); // Navy partition
+            const edgeMat = new THREE.MeshStandardMaterial({ color: 0x111111 }); // Black trim
+            
+            // Left Partition Wall
+            const leftWall = new THREE.Mesh(new THREE.BoxGeometry(0.1, 1.5, 3.0), wallMat);
+            leftWall.position.set(-1.5, 0.75, 0); leftWall.castShadow = true; leftWall.receiveShadow = true;
+            cubicleGroup.add(leftWall); makeInteractable(leftWall, cubicleGroup);
+            
+            // Right Partition Wall
+            const rightWall = new THREE.Mesh(new THREE.BoxGeometry(0.1, 1.5, 3.0), wallMat);
+            rightWall.position.set(1.5, 0.75, 0); rightWall.castShadow = true; rightWall.receiveShadow = true;
+            cubicleGroup.add(rightWall); makeInteractable(rightWall, cubicleGroup);
+
+            // Back Partition Wall
+            const backWall = new THREE.Mesh(new THREE.BoxGeometry(3.1, 1.5, 0.1), wallMat);
+            backWall.position.set(0, 0.75, 1.5); backWall.castShadow = true; backWall.receiveShadow = true;
+            cubicleGroup.add(backWall); makeInteractable(backWall, cubicleGroup);
+
+            // Executive Boss Desk
+            const execWood = new THREE.MeshStandardMaterial({ color: 0x2A1508, roughness: 0.3 }); // Darker mahogany
+            const deskTop = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.05, 1.0), execWood);
+            deskTop.position.set(0, 0.75, 0.5); deskTop.castShadow = true; deskTop.receiveShadow = true;
+            cubicleGroup.add(deskTop); makeInteractable(deskTop, cubicleGroup);
+
+            const dLeg1 = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.75, 0.8), execWood);
+            dLeg1.position.set(-0.9, 0.375, 0.5); dLeg1.castShadow = true; cubicleGroup.add(dLeg1); makeInteractable(dLeg1, cubicleGroup);
+            
+            const dLeg2 = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.75, 0.8), execWood);
+            dLeg2.position.set(0.9, 0.375, 0.5); dLeg2.castShadow = true; cubicleGroup.add(dLeg2); makeInteractable(dLeg2, cubicleGroup);
+
+            // --- BOSS NAMEPLATE WITH "HIND REGULAR" FONT ---
+            const nameplateGroup = new THREE.Group();
+            nameplateGroup.position.set(0, 0.775, 0.1); // Front center of the executive desk
+
+            const npBase = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.15, 0.05), new THREE.MeshStandardMaterial({ color: 0x887755, metalness: 0.8, roughness: 0.2 })); // Gold/Brass
+            npBase.castShadow = true; nameplateGroup.add(npBase);
+
+            // Create Canvas for Font rendering
+            const npCanvas = document.createElement('canvas');
+            npCanvas.width = 512; npCanvas.height = 128;
+            const npCtx = npCanvas.getContext('2d');
+            
+            const drawNameplate = () => {
+                npCtx.fillStyle = '#000000'; // Black background
+                npCtx.fillRect(0, 0, 512, 128);
+                npCtx.fillStyle = '#ffffff';
+                npCtx.font = '80px "Hind", sans-serif'; 
+                npCtx.textAlign = 'center';
+                npCtx.textBaseline = 'middle';
+                npCtx.fillText("BOSS", 256, 64);
+            };
+
+            drawNameplate();
+            document.fonts.ready.then(() => {
+                drawNameplate();
+                if(npTex) npTex.needsUpdate = true;
+            });
+
+            const npTex = new THREE.CanvasTexture(npCanvas);
+            const npTextPlane = new THREE.Mesh(new THREE.PlaneGeometry(0.58, 0.13), new THREE.MeshBasicMaterial({ map: npTex }));
+            npTextPlane.position.set(0, 0, -0.026); 
+            npTextPlane.rotation.y = Math.PI; 
+            nameplateGroup.add(npTextPlane);
+
+            cubicleGroup.add(nameplateGroup); makeInteractable(npBase, cubicleGroup);
+
+            scene.add(cubicleGroup);
+            makeObstacle(cubicleGroup, 1.8);
         }
 
         function makeInteractable(mesh, parentGroup = null) {
             mesh.userData.isInteractable = true;
             mesh.userData.punchCount = 0;
             mesh.userData.originalMat = mesh.material;
-            mesh.userData.parentGroup = parentGroup; // Links to entire object structure
+            mesh.userData.parentGroup = parentGroup; 
             if (!interactables.includes(mesh)) {
                 interactables.push(mesh);
             }
@@ -444,7 +573,7 @@
             const tie = new THREE.Mesh(new THREE.PlaneGeometry(0.04, 0.35), tieMat);
             tie.position.set(0, 0.05, 0.127); torso.add(tie);
 
-            // Arms (With shoulder pivots for accurate walking)
+            // Arms 
             const armGeo = new THREE.BoxGeometry(0.12, 0.6, 0.12);
             boss.userData.lArm = new THREE.Group(); boss.userData.lArm.position.set(-0.26, 1.45, 0);
             boss.userData.rArm = new THREE.Group(); boss.userData.rArm.position.set(0.26, 1.45, 0);
@@ -456,7 +585,7 @@
             boss.add(boss.userData.lArm);
             boss.add(boss.userData.rArm);
 
-            // Legs (Brown Pants with hip pivots)
+            // Legs
             const legGeo = new THREE.BoxGeometry(0.15, 0.8, 0.15);
             boss.userData.lLeg = new THREE.Group(); boss.userData.lLeg.position.set(-0.1, 0.95, 0);
             boss.userData.rLeg = new THREE.Group(); boss.userData.rLeg.position.set(0.1, 0.95, 0);
@@ -487,16 +616,18 @@
             makeInteractable(rLegMesh, boss);
             makeObstacle(boss, 0.5);
 
-            // Pacing waypoints sweeping through the aisles of the entire office
+            // Pacing waypoints: starts inside his cubicle, then sweeps through the aisles
             bossWaypoints = [
-                new THREE.Vector3(5, 0, 5),
-                new THREE.Vector3(5, 0, -6),
-                new THREE.Vector3(1, 0, -6),
-                new THREE.Vector3(1, 0, 5),
-                new THREE.Vector3(-3, 0, 5),
-                new THREE.Vector3(-3, 0, -6),
-                new THREE.Vector3(-6, 0, -6),
-                new THREE.Vector3(-6, 0, 5)
+                new THREE.Vector3(4.5, 0, 5.0), // Inside his cubicle
+                new THREE.Vector3(4.5, 0, 2.0), // Steps out of cubicle
+                new THREE.Vector3(4.5, 0, -7),  // Walks down the right aisle
+                new THREE.Vector3(1.5, 0, -7),  // Cuts across the front
+                new THREE.Vector3(1.5, 0, 2.0), // Walks up middle aisle
+                new THREE.Vector3(-2.5, 0, 2.0),// Crosses middle
+                new THREE.Vector3(-2.5, 0, -7), // Walks down left aisle
+                new THREE.Vector3(-6, 0, -7),   // Goes to far left corner
+                new THREE.Vector3(-6, 0, 5),    // Walks all the way to the back
+                new THREE.Vector3(2.0, 0, 5)    // Returns to his cubicle
             ];
             boss.position.copy(bossWaypoints);
         }
@@ -807,8 +938,7 @@
             const seconds = now.getSeconds();
             const ms = now.getMilliseconds();
             
-            // Calculate angles. Negative sign is used because the clock rotation axis
-            // makes standard counter-clockwise rotations positive.
+            // Calculate angles
             const secondAngle = -((seconds + ms / 1000) * (Math.PI * 2 / 60));
             const minuteAngle = -((minutes + seconds / 60) * (Math.PI * 2 / 60));
             const hourAngle = -(((hours % 12) + minutes / 60) * (Math.PI * 2 / 12));
