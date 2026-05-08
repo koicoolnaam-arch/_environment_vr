@@ -614,8 +614,7 @@
             makeInteractable(rArmMesh, boss);
             makeInteractable(lLegMesh, boss);
             makeInteractable(rLegMesh, boss);
-            makeObstacle(boss, 0.5);
-
+            
             // Pacing waypoints: starts inside his cubicle, then sweeps through the aisles
             bossWaypoints = [
                 new THREE.Vector3(4.5, 0, 5.0), // Inside his cubicle
@@ -629,7 +628,9 @@
                 new THREE.Vector3(-6, 0, 5),    // Walks all the way to the back
                 new THREE.Vector3(2.0, 0, 5)    // Returns to his cubicle
             ];
-            boss.position.copy(bossWaypoints);
+            
+            // CRITICAL FIX: The boss must copy from the actual vector object, not the array itself
+            boss.position.copy(bossWaypoints); 
         }
 
         function setupWebXR() {
@@ -841,15 +842,15 @@
                     let headPos = new THREE.Vector3();
                     camera.getWorldPosition(headPos);
 
-                    // If both hands are raised & user is showing back of palms (or front)
-                    if (dot1 > 0.4 && dot2 > 0.4 && wrist1.y > headPos.y - 0.5 && wrist2.y > headPos.y - 0.5) {
+                    // LOOSENED THRESHOLDS: So the user can comfortably move through the entire office
+                    if (dot1 > 0.2 && dot2 > 0.2 && wrist1.y > headPos.y - 0.7 && wrist2.y > headPos.y - 0.7) {
                         let dir = new THREE.Vector3(camDir.x, 0, camDir.z).normalize();
                         
                         // Frame-rate independent speed logic properly scaled
                         let speed = 0.150 * 10; 
                         let proposedPos = playerGroup.position.clone().add(dir.multiplyScalar(speed * dt));
                         
-                        // Collision Detection
+                        // IMPROVED COLLISION DETECTION: Prevents getting completely locked/stuck
                         let canMove = true;
                         const playerRadius = 0.4; 
                         for(let obs of obstacles) {
@@ -859,7 +860,13 @@
                             let dz = proposedPos.z - obs.position.z;
                             let dist = Math.sqrt(dx*dx + dz*dz);
                             
-                            if (dist < obs.userData.radius + playerRadius) {
+                            // Check current distance to see if we are trying to back out
+                            let currentDx = playerGroup.position.x - obs.position.x;
+                            let currentDz = playerGroup.position.z - obs.position.z;
+                            let currentDist = Math.sqrt(currentDx*currentDx + currentDz*currentDz);
+                            
+                            // Only block movement if we are clipping an object AND moving *closer* to it
+                            if (dist < obs.userData.radius + playerRadius && dist < currentDist) {
                                 canMove = false;
                                 break;
                             }
