@@ -44,6 +44,7 @@
         let controller1, controller2;
         let controllerGrip1, controllerGrip2;
         let boss;
+        let hourHand, minuteHand, secondHand; // Clock hands
         let interactables = [];
         let obstacles = []; // Objects that block player movement
         let dynamicObjects = []; // Physics objects
@@ -195,15 +196,93 @@
                 scene.add(cabinet);
             }
 
-            // 6. UI Text Panel
-            const canvas = document.createElement('canvas');
-            canvas.width = 1024; canvas.height = 256;
-            const ctx = canvas.getContext('2d');
-            ctx.fillStyle = 'black'; ctx.fillRect(0,0,1024,256);
-            ctx.fillStyle = 'white'; ctx.font = '50px sans-serif'; ctx.textAlign = 'center';
-            ctx.fillText("Use hands to interact with all solid objects in the office.", 512, 128);
-            const tex = new THREE.CanvasTexture(canvas);
-            const uiPlane = new THREE.Mesh(new THREE.PlaneGeometry(3, 0.75), new THREE.MeshBasicMaterial({map: tex}));
+            // 6. Working Wall Clock (Right Wall)
+            const clockGroup = new THREE.Group();
+            clockGroup.position.set(ROOM_X/2 - 0.05, 3.2, 0); // High up on the right wall
+            clockGroup.rotation.y = -Math.PI / 2; // Face inwards
+
+            // Clock Face
+            const faceGeo = new THREE.CylinderGeometry(0.4, 0.4, 0.05, 32);
+            const faceMat = new THREE.MeshStandardMaterial({ color: 0xffffff });
+            const face = new THREE.Mesh(faceGeo, faceMat);
+            face.rotation.x = Math.PI / 2;
+            face.castShadow = true;
+            clockGroup.add(face);
+
+            // Clock Rim
+            const rimGeo = new THREE.TorusGeometry(0.4, 0.04, 16, 32);
+            const rimMat = new THREE.MeshStandardMaterial({ color: 0x111111 });
+            const rim = new THREE.Mesh(rimGeo, rimMat);
+            rim.castShadow = true;
+            clockGroup.add(rim);
+
+            // Hands Pivots
+            const handMatBlack = new THREE.MeshBasicMaterial({ color: 0x000000 });
+            const handMatRed = new THREE.MeshBasicMaterial({ color: 0xaa0000 });
+
+            hourHand = new THREE.Group();
+            const hMesh = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.25, 0.02), handMatBlack);
+            hMesh.position.y = 0.125;
+            hMesh.position.z = 0.03;
+            hourHand.add(hMesh);
+            clockGroup.add(hourHand);
+
+            minuteHand = new THREE.Group();
+            const mMesh = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.35, 0.02), handMatBlack);
+            mMesh.position.y = 0.175;
+            mMesh.position.z = 0.04;
+            minuteHand.add(mMesh);
+            clockGroup.add(minuteHand);
+
+            secondHand = new THREE.Group();
+            const sMesh = new THREE.Mesh(new THREE.BoxGeometry(0.01, 0.35, 0.02), handMatRed);
+            sMesh.position.y = 0.175;
+            sMesh.position.z = 0.05;
+            secondHand.add(sMesh);
+            clockGroup.add(secondHand);
+
+            scene.add(clockGroup);
+
+            // 7. Poster Frame (Right Wall)
+            const posterCanvas = document.createElement('canvas');
+            posterCanvas.width = 1024;
+            posterCanvas.height = 512;
+            const pCtx = posterCanvas.getContext('2d');
+            
+            // Poster Background
+            pCtx.fillStyle = 'white';
+            pCtx.fillRect(0, 0, 1024, 512);
+            
+            // Poster Frame Border
+            pCtx.lineWidth = 40;
+            pCtx.strokeStyle = '#4A2C1A'; // Wood frame color
+            pCtx.strokeRect(20, 20, 984, 472);
+            
+            // Poster Text
+            pCtx.fillStyle = 'black';
+            pCtx.font = 'bold 80px sans-serif';
+            pCtx.textAlign = 'center';
+            pCtx.textBaseline = 'middle';
+            pCtx.fillText("WORST OFFICE EVER", 512, 256);
+
+            const posterTex = new THREE.CanvasTexture(posterCanvas);
+            const posterGeo = new THREE.PlaneGeometry(2, 1);
+            const posterMat = new THREE.MeshBasicMaterial({ map: posterTex });
+            const poster = new THREE.Mesh(posterGeo, posterMat);
+            
+            poster.position.set(ROOM_X/2 - 0.02, 3.2, -2.5); // Next to the clock on the right wall
+            poster.rotation.y = -Math.PI / 2; // Face inwards
+            scene.add(poster);
+
+            // 8. UI Text Panel
+            const canvasUI = document.createElement('canvas');
+            canvasUI.width = 1024; canvasUI.height = 256;
+            const ctxUI = canvasUI.getContext('2d');
+            ctxUI.fillStyle = 'black'; ctxUI.fillRect(0,0,1024,256);
+            ctxUI.fillStyle = 'white'; ctxUI.font = '50px sans-serif'; ctxUI.textAlign = 'center';
+            ctxUI.fillText("Use hands to interact with all solid objects in the office.", 512, 128);
+            const texUI = new THREE.CanvasTexture(canvasUI);
+            const uiPlane = new THREE.Mesh(new THREE.PlaneGeometry(3, 0.75), new THREE.MeshBasicMaterial({map: texUI}));
             uiPlane.position.set(0, 3, ROOM_Z/2 - 0.05);
             uiPlane.rotation.y = Math.PI; // Face the player at spawn
             scene.add(uiPlane);
@@ -324,25 +403,35 @@
             boss = new THREE.Group();
             
             const skinMat = new THREE.MeshStandardMaterial({ color: 0xffccaa });
-            const coatMat = new THREE.MeshStandardMaterial({ color: 0x2C3E66 });
-            const shirtMat = new THREE.MeshStandardMaterial({ color: 0xffffff });
-            const tieMat = new THREE.MeshStandardMaterial({ color: 0xB22222 });
-            const pantsMat = new THREE.MeshStandardMaterial({ color: 0x5D3A1A });
-            const hairMat = new THREE.MeshStandardMaterial({ color: 0x111111 });
+            const coatMat = new THREE.MeshStandardMaterial({ color: 0x2C3E66 }); // Blue coat
+            const shirtMat = new THREE.MeshStandardMaterial({ color: 0xffffff }); // White shirt
+            const tieMat = new THREE.MeshStandardMaterial({ color: 0xB22222 }); // Red tie
+            const pantsMat = new THREE.MeshStandardMaterial({ color: 0x5D3A1A }); // Brown pants
+            const hairMat = new THREE.MeshStandardMaterial({ color: 0x111111 }); // Black hair
+            const shoeMat = new THREE.MeshStandardMaterial({ color: 0x050505, roughness: 0.1 }); // Black formal shoes
 
             // Head & Face
             const head = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.25, 0.2), skinMat);
             head.position.y = 1.7;
             head.castShadow = true;
             
+            // Black Hair
             const hair = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.05, 0.22), hairMat);
             hair.position.y = 0.15;
             head.add(hair);
 
-            const browGeo = new THREE.BoxGeometry(0.06, 0.01, 0.01);
-            const lBrow = new THREE.Mesh(browGeo, hairMat); lBrow.position.set(-0.04, 0.05, 0.105); lBrow.rotation.z = -0.2;
-            const rBrow = new THREE.Mesh(browGeo, hairMat); rBrow.position.set(0.04, 0.05, 0.105); rBrow.rotation.z = 0.2;
+            // Annoyed Eyebrows
+            const browGeo = new THREE.BoxGeometry(0.06, 0.01, 0.02);
+            const lBrow = new THREE.Mesh(browGeo, hairMat); lBrow.position.set(-0.04, 0.05, 0.105); lBrow.rotation.z = -0.35;
+            const rBrow = new THREE.Mesh(browGeo, hairMat); rBrow.position.set(0.04, 0.05, 0.105); rBrow.rotation.z = 0.35;
             head.add(lBrow); head.add(rBrow);
+            
+            // Annoyed Frown
+            const lipGeo = new THREE.BoxGeometry(0.04, 0.01, 0.01);
+            const lLip = new THREE.Mesh(lipGeo, hairMat); lLip.position.set(-0.015, -0.05, 0.105); lLip.rotation.z = -0.2;
+            const rLip = new THREE.Mesh(lipGeo, hairMat); rLip.position.set(0.015, -0.05, 0.105); rLip.rotation.z = 0.2;
+            head.add(lLip); head.add(rLip);
+
             boss.add(head);
 
             // Body
@@ -355,31 +444,59 @@
             const tie = new THREE.Mesh(new THREE.PlaneGeometry(0.04, 0.35), tieMat);
             tie.position.set(0, 0.05, 0.127); torso.add(tie);
 
-            // Arms
+            // Arms (With shoulder pivots for accurate walking)
             const armGeo = new THREE.BoxGeometry(0.12, 0.6, 0.12);
-            boss.userData.lArm = new THREE.Mesh(armGeo, coatMat); boss.userData.lArm.position.set(-0.26, 1.25, 0); boss.userData.lArm.castShadow = true; boss.add(boss.userData.lArm);
-            boss.userData.rArm = new THREE.Mesh(armGeo, coatMat); boss.userData.rArm.position.set(0.26, 1.25, 0); boss.userData.rArm.castShadow = true; boss.add(boss.userData.rArm);
+            boss.userData.lArm = new THREE.Group(); boss.userData.lArm.position.set(-0.26, 1.45, 0);
+            boss.userData.rArm = new THREE.Group(); boss.userData.rArm.position.set(0.26, 1.45, 0);
+            
+            const lArmMesh = new THREE.Mesh(armGeo, coatMat); lArmMesh.position.y = -0.25; lArmMesh.castShadow = true;
+            const rArmMesh = new THREE.Mesh(armGeo, coatMat); rArmMesh.position.y = -0.25; rArmMesh.castShadow = true;
+            boss.userData.lArm.add(lArmMesh);
+            boss.userData.rArm.add(rArmMesh);
+            boss.add(boss.userData.lArm);
+            boss.add(boss.userData.rArm);
 
-            // Legs
-            const legGeo = new THREE.BoxGeometry(0.15, 0.9, 0.15);
-            boss.userData.lLeg = new THREE.Mesh(legGeo, pantsMat); boss.userData.lLeg.position.set(-0.1, 0.45, 0); boss.userData.lLeg.castShadow = true; boss.add(boss.userData.lLeg);
-            boss.userData.rLeg = new THREE.Mesh(legGeo, pantsMat); boss.userData.rLeg.position.set(0.1, 0.45, 0); boss.userData.rLeg.castShadow = true; boss.add(boss.userData.rLeg);
+            // Legs (Brown Pants with hip pivots)
+            const legGeo = new THREE.BoxGeometry(0.15, 0.8, 0.15);
+            boss.userData.lLeg = new THREE.Group(); boss.userData.lLeg.position.set(-0.1, 0.95, 0);
+            boss.userData.rLeg = new THREE.Group(); boss.userData.rLeg.position.set(0.1, 0.95, 0);
+            
+            const lLegMesh = new THREE.Mesh(legGeo, pantsMat); lLegMesh.position.y = -0.4; lLegMesh.castShadow = true;
+            const rLegMesh = new THREE.Mesh(legGeo, pantsMat); rLegMesh.position.y = -0.4; rLegMesh.castShadow = true;
+            boss.userData.lLeg.add(lLegMesh);
+            boss.userData.rLeg.add(rLegMesh);
+
+            // Black formal shoes
+            const shoeGeo = new THREE.BoxGeometry(0.16, 0.1, 0.2);
+            const lShoe = new THREE.Mesh(shoeGeo, shoeMat); lShoe.position.set(0, -0.85, 0.025); lShoe.castShadow = true;
+            const rShoe = new THREE.Mesh(shoeGeo, shoeMat); rShoe.position.set(0, -0.85, 0.025); rShoe.castShadow = true;
+            boss.userData.lLeg.add(lShoe);
+            boss.userData.rLeg.add(rShoe);
+
+            boss.add(boss.userData.lLeg);
+            boss.add(boss.userData.rLeg);
 
             scene.add(boss);
             
             // Make components interactable
             makeInteractable(head, boss);
             makeInteractable(torso, boss);
-            makeInteractable(boss.userData.lArm, boss);
-            makeInteractable(boss.userData.rArm, boss);
-            makeObstacle(boss, 0.4);
+            makeInteractable(lArmMesh, boss);
+            makeInteractable(rArmMesh, boss);
+            makeInteractable(lLegMesh, boss);
+            makeInteractable(rLegMesh, boss);
+            makeObstacle(boss, 0.5);
 
-            // Updated Waypoints around the newly expanded perimeter
+            // Pacing waypoints sweeping through the aisles of the entire office
             bossWaypoints = [
-                new THREE.Vector3(ROOM_X/2 - 1.5, 0, ROOM_Z/2 - 1.5),
-                new THREE.Vector3(-ROOM_X/2 + 1.5, 0, ROOM_Z/2 - 1.5),
-                new THREE.Vector3(-ROOM_X/2 + 1.5, 0, -ROOM_Z/2 + 1.5),
-                new THREE.Vector3(ROOM_X/2 - 1.5, 0, -ROOM_Z/2 + 1.5)
+                new THREE.Vector3(5, 0, 5),
+                new THREE.Vector3(5, 0, -6),
+                new THREE.Vector3(1, 0, -6),
+                new THREE.Vector3(1, 0, 5),
+                new THREE.Vector3(-3, 0, 5),
+                new THREE.Vector3(-3, 0, -6),
+                new THREE.Vector3(-6, 0, -6),
+                new THREE.Vector3(-6, 0, 5)
             ];
             boss.position.copy(bossWaypoints);
         }
@@ -667,18 +784,38 @@
                 currentWaypointIndex = (currentWaypointIndex + 1) % bossWaypoints.length;
             } else {
                 dir.normalize();
-                boss.position.add(dir.multiplyScalar(0.5 * dt));
+                boss.position.add(dir.multiplyScalar(0.8 * dt)); // Faster pacing speed
                 
                 let lookTarget = boss.position.clone().add(dir);
                 boss.lookAt(lookTarget);
 
-                // Exaggerated walking cycle
+                // Exaggerated walking cycle based on speed
                 let time = clock.getElapsedTime();
-                boss.userData.lLeg.rotation.x = Math.sin(time * 5) * 0.5;
-                boss.userData.rLeg.rotation.x = Math.sin(time * 5 + Math.PI) * 0.5;
-                boss.userData.lArm.rotation.x = Math.sin(time * 5 + Math.PI) * 0.5;
-                boss.userData.rArm.rotation.x = Math.sin(time * 5) * 0.5;
+                boss.userData.lLeg.rotation.x = Math.sin(time * 8) * 0.5;
+                boss.userData.rLeg.rotation.x = Math.sin(time * 8 + Math.PI) * 0.5;
+                boss.userData.lArm.rotation.x = Math.sin(time * 8 + Math.PI) * 0.5;
+                boss.userData.rArm.rotation.x = Math.sin(time * 8) * 0.5;
             }
+        }
+
+        function updateClockHands() {
+            if (!hourHand || !minuteHand || !secondHand) return;
+            
+            const now = new Date();
+            const hours = now.getHours();
+            const minutes = now.getMinutes();
+            const seconds = now.getSeconds();
+            const ms = now.getMilliseconds();
+            
+            // Calculate angles. Negative sign is used because the clock rotation axis
+            // makes standard counter-clockwise rotations positive.
+            const secondAngle = -((seconds + ms / 1000) * (Math.PI * 2 / 60));
+            const minuteAngle = -((minutes + seconds / 60) * (Math.PI * 2 / 60));
+            const hourAngle = -(((hours % 12) + minutes / 60) * (Math.PI * 2 / 12));
+
+            secondHand.rotation.z = secondAngle;
+            minuteHand.rotation.z = minuteAngle;
+            hourHand.rotation.z = hourAngle;
         }
 
         function animate() {
@@ -693,6 +830,7 @@
             processHandLogic(hand2, 1, dt);
             updatePhysics(dt);
             updateBoss(dt);
+            updateClockHands();
             
             // Hard clamp player to the room so they can never be thrown out (Solid walls)
             const padding = 0.5;
