@@ -53,6 +53,13 @@
         let bossWaypoints = [];
         let currentWaypointIndex = 0;
         
+        // Game Timer Variables
+        let timeLeft = 300; // 5 minutes
+        let isGameOver = false;
+        let timerCtx, timerTex;
+        let lastSecond = 300;
+        let gameOverMesh;
+
         // Hand Tracking & Gesture States
         let handStates = {
             0: { isPinching: false, isFist: false, grabbedObj: null, grabOffset: new THREE.Vector3(), velocity: new THREE.Vector3(), prevPos: new THREE.Vector3(), cooldown: 0 },
@@ -96,6 +103,34 @@
             playerBody = new THREE.Mesh(bodyGeo, bodyMat);
             playerBody.castShadow = true;
             playerGroup.add(playerBody); // Attached to player group
+
+            // --- HUD SETUP (Timer & Game Over) ---
+            const timerCanvas = document.createElement('canvas');
+            timerCanvas.width = 256; timerCanvas.height = 128;
+            timerCtx = timerCanvas.getContext('2d');
+            timerTex = new THREE.CanvasTexture(timerCanvas);
+            const timerMat = new THREE.MeshBasicMaterial({ map: timerTex, transparent: true });
+            const timerMesh = new THREE.Mesh(new THREE.PlaneGeometry(0.15, 0.075), timerMat);
+            timerMesh.position.set(0.2, 0.15, -0.4); // Top right corner relative to camera
+            camera.add(timerMesh);
+
+            const gameOverCanvas = document.createElement('canvas');
+            gameOverCanvas.width = 512; gameOverCanvas.height = 256;
+            const goCtx = gameOverCanvas.getContext('2d');
+            goCtx.clearRect(0, 0, 512, 256);
+            goCtx.fillStyle = 'red';
+            goCtx.font = 'bold 80px sans-serif';
+            goCtx.textAlign = 'center';
+            goCtx.textBaseline = 'middle';
+            goCtx.fillText("GAME OVER", 256, 128);
+            const gameOverTex = new THREE.CanvasTexture(gameOverCanvas);
+            const gameOverMat = new THREE.MeshBasicMaterial({ map: gameOverTex, transparent: true });
+            gameOverMesh = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.25), gameOverMat);
+            gameOverMesh.position.set(0, 0, -0.4); // Center relative to camera
+            gameOverMesh.visible = false;
+            camera.add(gameOverMesh);
+
+            updateTimerUI(timeLeft);
 
             renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setPixelRatio(window.devicePixelRatio);
@@ -660,23 +695,20 @@
             makeInteractable(lLegMesh, boss);
             makeInteractable(rLegMesh, boss);
             
-            // Pacing waypoints
+            // Pacing waypoints: Boss strictly pacing around the cubicles
             bossWaypoints = [
-                new THREE.Vector3(0, 0, ROOM_Z / 2 - 4.0), // VERY FIRST POINT: Directly in front of the player!
-                new THREE.Vector3(4.5, 0, 5.0), // Inside his cubicle
-                new THREE.Vector3(4.5, 0, 2.0), // Steps out of cubicle
-                new THREE.Vector3(4.5, 0, -7),  // Walks down the right aisle
-                new THREE.Vector3(1.5, 0, -7),  // Cuts across the front
-                new THREE.Vector3(1.5, 0, 2.0), // Walks up middle aisle
-                new THREE.Vector3(-2.5, 0, 2.0),// Crosses middle
-                new THREE.Vector3(-2.5, 0, -7), // Walks down left aisle
-                new THREE.Vector3(-6, 0, -7),   // Goes to far left corner
-                new THREE.Vector3(-6, 0, 5),    // Walks all the way to the back
-                new THREE.Vector3(2.0, 0, 5)    // Returns to his cubicle
+                new THREE.Vector3(0, 0, -2.0),    // Center aisle start
+                new THREE.Vector3(0, 0, -6.0),    // Walks down middle aisle
+                new THREE.Vector3(-2.0, 0, -6.0), // Crosses to left aisle
+                new THREE.Vector3(-2.0, 0, -2.0), // Walks up left aisle
+                new THREE.Vector3(2.0, 0, -2.0),  // Crosses over to right aisle
+                new THREE.Vector3(2.0, 0, -6.0),  // Walks down right aisle
+                new THREE.Vector3(0, 0, -6.0)     // Back to middle
             ];
             
             // CRITICAL FIX DONE HERE: The boss must copy from the actual vector object, not the array itself.
             boss.position.copy(bossWaypoints); 
+            boss.position.y = 0; // Explicitly ensure boss is firmly on the ground level
         }
 
         function setupWebXR() {
@@ -1008,9 +1040,37 @@
             hourHand.rotation.z = hourAngle;
         }
 
+        function updateTimerUI(seconds) {
+            timerCtx.clearRect(0, 0, 256, 128);
+            timerCtx.fillStyle = 'red';
+            timerCtx.font = 'bold 50px sans-serif';
+            timerCtx.textAlign = 'right';
+            timerCtx.textBaseline = 'top';
+            let m = Math.floor(seconds / 60);
+            let s = seconds % 60;
+            let timeStr = m + ":" + (s < 10 ? "0" : "") + s;
+            timerCtx.fillText(timeStr, 240, 10);
+            timerTex.needsUpdate = true;
+        }
+
         function animate() {
             const dt = clock.getDelta();
             
+            if (!isGameOver) {
+                timeLeft -= dt;
+                if (timeLeft <= 0) {
+                    timeLeft = 0;
+                    isGameOver = true;
+                    gameOverMesh.visible = true;
+                }
+                
+                let currentSecond = Math.ceil(timeLeft);
+                if (currentSecond !== lastSecond) {
+                    lastSecond = currentSecond;
+                    updateTimerUI(currentSecond);
+                }
+            }
+
             let camWorld = new THREE.Vector3();
             camera.getWorldPosition(camWorld);
             playerBody.position.set(camera.position.x, 0.7, camera.position.z);
