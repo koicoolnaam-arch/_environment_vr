@@ -106,13 +106,13 @@
 
             // --- HUD SETUP (Timer & Game Over) ---
             const timerCanvas = document.createElement('canvas');
-            timerCanvas.width = 512; timerCanvas.height = 256;
+            timerCanvas.width = 256; timerCanvas.height = 128;
             timerCtx = timerCanvas.getContext('2d');
             timerTex = new THREE.CanvasTexture(timerCanvas);
             const timerMat = new THREE.MeshBasicMaterial({ map: timerTex, transparent: true });
-            // Increased size by 3x
-            const timerMesh = new THREE.Mesh(new THREE.PlaneGeometry(0.45, 0.225), timerMat);
-            timerMesh.position.set(0.3, 0.25, -0.6); // Top right corner relative to camera, pushed out slightly to fit
+            // Reverted size back to original
+            const timerMesh = new THREE.Mesh(new THREE.PlaneGeometry(0.15, 0.075), timerMat);
+            timerMesh.position.set(0.2, 0.15, -0.4); // Top right corner relative to camera
             camera.add(timerMesh);
 
             const gameOverCanvas = document.createElement('canvas');
@@ -905,7 +905,6 @@
                 let camDir = new THREE.Vector3();
                 camera.getWorldDirection(camDir);
 
-                // Analyze wrist rotation to see if palm faces away (show backs of hands)
                 let w1 = hand1.joints && hand1.joints['wrist'];
                 let w2 = hand2.joints && hand2.joints['wrist'];
 
@@ -919,8 +918,13 @@
                     let headPos = new THREE.Vector3();
                     camera.getWorldPosition(headPos);
 
-                    // Slightly more lenient detection bounds so you don't stop accidentally
-                    if (dot1 > 0.1 && dot2 > 0.1 && wrist1.y > headPos.y - 0.8 && wrist2.y > headPos.y - 0.8) {
+                    // STRICT CHECKS: 
+                    // 1. Palms must be facing clearly towards or away from the camera (dot > 0.6)
+                    // 2. Wrists must be at eye level (within ~35cm of headset height)
+                    let isEyeLevel1 = Math.abs(wrist1.y - headPos.y) < 0.35;
+                    let isEyeLevel2 = Math.abs(wrist2.y - headPos.y) < 0.35;
+
+                    if (dot1 > 0.6 && dot2 > 0.6 && isEyeLevel1 && isEyeLevel2) {
                         let dir = new THREE.Vector3(camDir.x, 0, camDir.z).normalize();
                         
                         let speed = 0.150 * 10; 
@@ -1042,15 +1046,15 @@
         }
 
         function updateTimerUI(seconds) {
-            timerCtx.clearRect(0, 0, 512, 256);
+            timerCtx.clearRect(0, 0, 256, 128);
             timerCtx.fillStyle = 'red';
-            timerCtx.font = 'bold 120px sans-serif';
+            timerCtx.font = 'bold 50px sans-serif';
             timerCtx.textAlign = 'right';
             timerCtx.textBaseline = 'top';
             let m = Math.floor(seconds / 60);
             let s = seconds % 60;
             let timeStr = m + ":" + (s < 10 ? "0" : "") + s;
-            timerCtx.fillText(timeStr, 480, 20);
+            timerCtx.fillText(timeStr, 240, 10);
             timerTex.needsUpdate = true;
         }
 
