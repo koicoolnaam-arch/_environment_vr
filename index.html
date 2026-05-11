@@ -106,12 +106,13 @@
 
             // --- HUD SETUP (Timer & Game Over) ---
             const timerCanvas = document.createElement('canvas');
-            timerCanvas.width = 256; timerCanvas.height = 128;
+            timerCanvas.width = 512; timerCanvas.height = 256;
             timerCtx = timerCanvas.getContext('2d');
             timerTex = new THREE.CanvasTexture(timerCanvas);
             const timerMat = new THREE.MeshBasicMaterial({ map: timerTex, transparent: true });
-            const timerMesh = new THREE.Mesh(new THREE.PlaneGeometry(0.15, 0.075), timerMat);
-            timerMesh.position.set(0.2, 0.15, -0.4); // Top right corner relative to camera
+            // Increased size by 3x
+            const timerMesh = new THREE.Mesh(new THREE.PlaneGeometry(0.45, 0.225), timerMat);
+            timerMesh.position.set(0.3, 0.25, -0.6); // Top right corner relative to camera, pushed out slightly to fit
             camera.add(timerMesh);
 
             const gameOverCanvas = document.createElement('canvas');
@@ -1041,15 +1042,15 @@
         }
 
         function updateTimerUI(seconds) {
-            timerCtx.clearRect(0, 0, 256, 128);
+            timerCtx.clearRect(0, 0, 512, 256);
             timerCtx.fillStyle = 'red';
-            timerCtx.font = 'bold 50px sans-serif';
+            timerCtx.font = 'bold 120px sans-serif';
             timerCtx.textAlign = 'right';
             timerCtx.textBaseline = 'top';
             let m = Math.floor(seconds / 60);
             let s = seconds % 60;
             let timeStr = m + ":" + (s < 10 ? "0" : "") + s;
-            timerCtx.fillText(timeStr, 240, 10);
+            timerCtx.fillText(timeStr, 480, 20);
             timerTex.needsUpdate = true;
         }
 
@@ -1069,23 +1070,24 @@
                     lastSecond = currentSecond;
                     updateTimerUI(currentSecond);
                 }
+
+                // Entire game logic sits inside this block so it freezes on Game Over
+                let camWorld = new THREE.Vector3();
+                camera.getWorldPosition(camWorld);
+                playerBody.position.set(camera.position.x, 0.7, camera.position.z);
+
+                processLocomotion(dt);
+                processHandLogic(hand1, 0, dt);
+                processHandLogic(hand2, 1, dt);
+                updatePhysics(dt);
+                updateBoss(dt);
+                updateClockHands();
+                
+                // Hard clamp player to the room so they can never be thrown out (Solid walls)
+                const padding = 0.5;
+                playerGroup.position.x = Math.max(-ROOM_X/2 + padding, Math.min(ROOM_X/2 - padding, playerGroup.position.x));
+                playerGroup.position.z = Math.max(-ROOM_Z/2 + padding, Math.min(ROOM_Z/2 - padding, playerGroup.position.z));
             }
-
-            let camWorld = new THREE.Vector3();
-            camera.getWorldPosition(camWorld);
-            playerBody.position.set(camera.position.x, 0.7, camera.position.z);
-
-            processLocomotion(dt);
-            processHandLogic(hand1, 0, dt);
-            processHandLogic(hand2, 1, dt);
-            updatePhysics(dt);
-            updateBoss(dt);
-            updateClockHands();
-            
-            // Hard clamp player to the room so they can never be thrown out (Solid walls)
-            const padding = 0.5;
-            playerGroup.position.x = Math.max(-ROOM_X/2 + padding, Math.min(ROOM_X/2 - padding, playerGroup.position.x));
-            playerGroup.position.z = Math.max(-ROOM_Z/2 + padding, Math.min(ROOM_Z/2 - padding, playerGroup.position.z));
 
             renderer.render(scene, camera);
         }
